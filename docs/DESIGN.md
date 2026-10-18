@@ -276,14 +276,23 @@ interface Embedder  { embed(texts: string[]): Promise<number[][]> }
 - B calls C's `snap_find`/`deal_search` via the internal interface; C ships a mock first.
 - Messenger (A) only needs `approvals` + orchestrator entry point (B).
 
-## 10. Milestones
-| Phase | Exit criteria |
-|---|---|
-| **M0 — Contracts** (first ~2h) | Repo scaffolded, schemas + fixtures merged, Atlas seeded, every app boots, VEYZL connected |
-| **M1 — Golden path on mocks** | Snap (mock vision/prices) → verdict → watch → admin price drop → approval on web → purchase via mandate → feed + stats update |
-| **M2 — Real integrations** | Perceptron, SerpAPI live, Photon iMessage approvals + photo intake, Rewards + Smart Pay + Timekeeper |
-| **M3 — Polish & submit** | Motion pass, reduced-motion, demo reset reliable, VEYZL before/after, Side Kick posted, demo video recorded, track submissions |
-| *Stretch* | Photon Voice outbound approval call |
+## 10. Milestones — MVP-first
+
+**Rule: get one thin, end-to-end, demo-able platform on `main` ASAP, then grow it tier by tier.** Each tier must leave `main` demo-able. Don't start tier N+1 work until your tier N PRs are merged. Thin and wired beats complete and isolated — stub what you must, but keep the whole loop working.
+
+| Tier | Target | Exit criteria (all on `main`) |
+|---|---|---|
+| **MVP-0 — Core loop** | **~3–4h** | Dashboard Home shows stats, live Agent Feed (SSE), latest verdict, pending approvals. Extension snap → `/snap` (mock vision + mock/cached prices) → **real Claude Worth-It verdict** in the side panel → Watch. `/admin` price drop → Watcher creates approval → approve on web → `purchase()` via mandate → feed + stats update live. iMessage = console. |
+| **MVP-1 — Real inputs & iMessage** | ~+3–4h | Perceptron vision live; SerpAPI live with cache + Haiku labeling; Atlas Search product resolution; Photon iMessage: approvals (YES/NO), photo intake → snap, verdict summaries; orchestrator + `/chat`. |
+| **MVP-2 — Feature breadth** | ~+3–4h | Rewards Optimizer (+ Vector Search), Smart Pay, Timekeeper (T-Mobile), Spending Profile charts, Wishlist + Mandates pages, region-select + video-frame snap. |
+| **MVP-3 — Polish & submit** | remaining | Motion pass, empty/loading/error states, reduced motion, demo reset reliable, VEYZL before/after, Side Kick posted, pitch + video, track submissions. |
+| *Stretch* | — | Photon Voice outbound approval call (S1). |
+
+### MVP-0 scope per workstream
+- **A:** *minimal* seed — `u_maya` only, 12 months of transactions (café spend), cards, 2 mandates, hero products (Bambino + iPhone) with offers and 90-day price history; `/stats`, `/mandates`, `/approvals` (list + resolve → `purchase()`), `/events` via change streams, `/admin/price-drop`, `/admin/reset`; `purchase()` on `authorize()`. Full catalog, backup personas, rewards, T-Mobile data, and Atlas Search/Vector indexes → MVP-1/2.
+- **B:** Worth-It verdict (structured output, real Claude) exported as a function C's `/snap` calls; `/wishlist` (create watch); Watcher reacting to `price_drop` → approval (or buy within mandate). Orchestrator, `/chat`, Timekeeper, Rewards, Smart Pay → MVP-1/2.
+- **C:** `/snap` real pipeline wired end to end with **mock** vision + `PRICE_SOURCE=mock|cache` (hero products), calling B's Worth-It (fixture until merged); extension side panel shows verdict + offers + Watch. Perceptron, SerpAPI, region select → MVP-1/2.
+- **D:** app shell + Home (stats, live feed, latest verdict, pending approvals with Approve/Deny) + `/admin` (price drop, reset). Core components: `VerdictCard`, `ApprovalCard`, `FeedItem`, `MoneyStat`. Other pages/components → MVP-2; motion polish → MVP-3 (basic transitions fine earlier).
 
 ## 11. Demo script (3 min)
 1. **Hook:** "Your agent spends like it's your money — because it is."
