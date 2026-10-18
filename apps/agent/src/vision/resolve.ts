@@ -32,20 +32,48 @@ export function queryTokens(d: Detection): string[] {
   return [...new Set([...d.ocr, ...d.objects.map((o) => o.label), d.caption ?? ""].flatMap(words))];
 }
 
-type Scored = { p: Product; score: number; anchored: boolean; modelHit: boolean };
+const hasDigit = (w: string) => /\d/.test(w);
+// "$179.99", "179.99", "€1,299" — numbers on a price tag aren't model numbers.
+const PRICE = /^[\s$€£¥]*\d[\d,]*(\.\d{1,2})?\s*$|[$€£¥]/;
+// Vision models hedge when they guess a generation ("Apple iPhone 7 — model unverified").
+const HEDGE = /\b(unverified|unknown|unsure|uncertain|unclear|possibly|maybe|likely|probably|inferred|appears|looks like|guess)\b/i;
 
-/** Brand +2, full model +3, each matching title word +1, each unmatched title word −0.5 (so "Bambino" beats "Bambino Plus"). */
-export function scoreProduct(p: Product, tokens: Set<string>): Omit<Scored, "p"> {
+/** What the snap says, reduced to what matching needs. */
+export type Evidence = { tokens: Set<string>; numbers: Set<string>; hedged: boolean };
+
+export function evidence(d: Detection): Evidence {
+  const texts = [d.caption ?? "", ...d.objects.map((o) => o.label), ...d.ocr.filter((t) => !PRICE.test(t))];
+  return { tokens: new Set(queryTokens(d)), numbers: new Set(texts.flatMap(words).filter(hasDigit)), hedged: HEDGE.test(d.caption ?? "") };
+}
+
+type Scored = { p: Product; score: number; anchored: boolean; modelHit: boolean; confident: boolean };
+
+/**
+ * Brand +2, full model +3, each matching title word +1, each unmatched title word −0.5 (so "Bambino" beats "Bambino
+ * Plus"). Confident on its own (no Claude) only when anchored on brand or model, ≥ MIN_SCORE, and (#35):
+ *  - no number conflict: the snap shows a model number and this product's model has a different one ("7" vs "17");
+ *  - otherwise it must be confirmed (full model or full title) when the product's model is numbered (iPhone 17, BES450),
+ *    when the snap shows a number this product doesn't carry ("iPhone 7" vs "iPhone Air"), or when the caption hedges.
+ */
+export function scoreProduct(p: Product, ev: Evidence): Omit<Scored, "p"> {
+  const { tokens } = ev;
   const brandHit = words(p.brand).some((w) => tokens.has(w));
   const model = words(p.model);
   const modelHit = model.length > 0 && model.every((w) => tokens.has(w)); // "iPhone 17" needs both words
   const title = words(p.title);
   const titleHits = title.filter((w) => tokens.has(w)).length;
-  const score = (brandHit ? 2 : 0) + (modelHit ? 3 : 0) + titleHits - 0.5 * (title.length - titleHits);
-  return { score, anchored: brandHit || modelHit, modelHit };
+  const modelNumbers = model.filter(hasDigit);
+  const conflict = ev.numbers.size > 0 && modelNumbers.length > 0 && !modelNumbers.some((n) => ev.numbers.has(n));
+  const own = new Set([...model, ...title]);
+  const unexplained = [...ev.numbers].some((n) => !own.has(n));
+  const confirmed = modelHit || (title.length > 0 && titleHits === title.length);
+  const score = (brandHit ? 2 : 0) + (modelHit ? 3 : 0) + titleHits - 0.5 * (title.length - titleHits) - (conflict ? 3 : 0);
+  const anchored = brandHit || modelHit;
+  const confident = anchored && score >= MIN_SCORE && !conflict && (confirmed || (!modelNumbers.length && !unexplained && !ev.hedged));
+  return { score, anchored, modelHit, confident };
 }
 
-const isConfident = (s: Scored) => s.anchored && s.score >= MIN_SCORE;
+const isConfident = (s: Scored) => s.confident;
 
 /** What the panel shows when nothing matched: named from the detection, never saved, no offers. */
 export function unidentified(d: Detection): Product {
@@ -54,18 +82,18 @@ export function unidentified(d: Detection): Product {
 }
 
 export async function resolveProduct(d: Detection, img?: Uint8Array): Promise<Resolution> {
-  const tokens = queryTokens(d);
-  const set = new Set(tokens);
+  const ev = evidence(d);
+  const tokens = [...ev.tokens];
   const none: Resolution = { product: unidentified(d), identified: false, via: "none" };
   if (!tokens.length) return none;
 
   // No DB (mock path): the hero fixture is the whole catalog.
-  const fixture = (): Resolution => (isConfident({ p: fx.product, ...scoreProduct(fx.product, set) }) ? { product: fx.product, identified: true, via: "fixture" } : none);
+  const fixture = (): Resolution => (isConfident({ p: fx.product, ...scoreProduct(fx.product, ev) }) ? { product: fx.product, identified: true, via: "fixture" } : none);
   if (!env.MONGODB_URI) return fixture();
 
   let ranked: Scored[];
   try {
-    ranked = await withTimeout(candidates(tokens, set), undefined, "product lookup");
+    ranked = await withTimeout(candidates(tokens, ev), undefined, "product lookup");
   } catch (e) {
     console.warn("resolveProduct: db lookup failed:", (e as Error).message);
     return fixture();
@@ -102,12 +130,12 @@ function unsaved(p: { brand: string; model: string; title: string; category: Pro
   return { _id: `${NEW_PRODUCT_PREFIX}${canonicalKey}`, ...p, source: "mock", canonicalKey };
 }
 
-async function candidates(tokens: string[], set: Set<string>): Promise<Scored[]> {
+async function candidates(tokens: string[], ev: Evidence): Promise<Scored[]> {
   const c = await collections();
   const score = (rows: unknown[]) =>
     rows.flatMap((r) => {
       const p = Product.safeParse(r);
-      return p.success ? [{ p: p.data, ...scoreProduct(p.data, set) }] : [];
+      return p.success ? [{ p: p.data, ...scoreProduct(p.data, ev) }] : [];
     });
 
   // Atlas Search when A's index exists; on a missing index $search errors or returns nothing, and regex takes over.
