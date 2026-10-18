@@ -61,10 +61,16 @@ export async function photonSend(userId: string, msg: OutboundMessage) {
   if (msg.imageUrl && !msg.imageUrl.includes("placehold.co")) await space.send(attachment(new URL(msg.imageUrl)));
 }
 
-/** Reads the inbound stream forever (reconnecting with backoff) and hands each allowed message to `deliver`. */
+/**
+ * Reads the inbound stream forever (reconnecting with backoff) and hands each allowed message to `deliver` without
+ * blocking the stream. Only 1:1 DMs count — a group chat must never become the channel for receipts or approvals — and
+ * messages from before this process started are skipped, so a redelivered old "yes" can't answer a newer approval.
+ */
 export function startPhotonInbound(deliver: (msg: InboundMessage) => Promise<void>) {
   if (!DEMO_PHONE) console.warn("[photon] DEMO_USER_PHONE not set — inbound texts will all be ignored and nothing will be sent");
+  const startedAt = Date.now() - 5_000; // small allowance for clock skew with Photon's timestamps
   const seen = new Set<string>(); // the stream is at-least-once
+  const order = new Map<string, Promise<void>>();
   let failures = 0;
   const listen = async () => {
     try {
@@ -73,17 +79,24 @@ export function startPhotonInbound(deliver: (msg: InboundMessage) => Promise<voi
         if (message.direction !== "inbound" || seen.has(message.id)) continue;
         seen.add(message.id);
         if (seen.size > 5000) seen.delete(seen.values().next().value!);
+        if (message.timestamp.getTime() < startedAt) continue;
+        if (imessage(space).type !== "dm") continue;
         const phone = normalizePhone(message.sender?.id);
         if (!ALLOWED.has(phone)) continue; // never answer strangers
-        const userId = await userFor(phone);
-        if (!userId) continue;
         const c = message.content;
-        const inbound: InboundMessage = { userId, text: "", imageUrls: [], channel: "imessage" };
-        if (c.type === "text") inbound.text = c.text;
-        else if (c.type === "attachment" && c.mimeType.startsWith("image/")) inbound.imageUrls.push(`data:${c.mimeType};base64,${(await c.read()).toString("base64")}`);
-        else continue;
+        if (c.type !== "text" && !(c.type === "attachment" && c.mimeType.startsWith("image/"))) continue;
         spaces.set(phone, space);
-        await space.responding(() => deliver(inbound)).catch((e) => console.error("[photon] inbound handler failed:", (e as Error).message));
+        // Prepare in arrival order per sender (a photo read must not let its caption overtake it); handle without blocking.
+        const prepared = (order.get(phone) ?? Promise.resolve()).then(async (): Promise<InboundMessage | undefined> => {
+          const userId = await userFor(phone);
+          if (!userId) return undefined;
+          const imageUrls = c.type === "attachment" ? [`data:${c.mimeType};base64,${(await c.read()).toString("base64")}`] : [];
+          return { userId, text: c.type === "text" ? c.text : "", imageUrls, channel: "imessage" };
+        });
+        order.set(phone, prepared.then(() => {}, () => {}));
+        void prepared
+          .then((inbound) => inbound && space.responding(() => deliver(inbound)))
+          .catch((e) => console.error("[photon] inbound handler failed:", (e as Error).message));
       }
       console.warn("[photon] inbound stream ended — reconnecting");
     } catch (e) {

@@ -13,7 +13,7 @@ import { listMandates, revokeMandate } from "../core/mandates";
 import { resolveApproval } from "../core/purchase";
 import { subscribe } from "../core/sse";
 import { getStats } from "../core/stats";
-import { messenger } from "../messenger";
+import { lastApprovalAsked, messenger } from "../messenger";
 import { routeInbound } from "../messenger/inbound";
 import { z } from "zod";
 
@@ -101,17 +101,18 @@ core.post("/admin/price-drop", async (c) => {
   if (!offer) throw new HTTPException(404, { message: `no new US offer for ${productId}` });
   return c.json({ offer: { ...offer, priceCents: newPriceCents }, previousPriceCents: offer.priceCents });
 });
-// Simulate an inbound iMessage from the demo user (works with MESSENGER=console or photon). Replies are returned and
-// also sent through the messenger. { text } for "YES A7" / chat, { image } (base64 or data URL) for a photo.
+// Simulate an inbound iMessage from the demo user (works with MESSENGER=console or photon): runs the same handler as a
+// real text and returns the replies. { text } for "YES A7" / chat, { image } (base64 or data URL) for a photo.
 const AdminInbound = z.object({ text: z.string().default(""), image: z.string().min(1).optional() }).refine((b) => b.text.trim() || b.image, "text or image required");
 core.post("/admin/inbound", async (c) => {
   const { text, image } = AdminInbound.parse(await c.req.json());
   if (!live) throw new HTTPException(503, { message: "MONGODB_URI not set" });
   const replies: string[] = [];
-  await routeInbound({ userId, text, imageUrls: image ? [image] : [], channel: "imessage" }, async (m) => {
+  const msg = { userId, text, imageUrls: image ? [image] : [], channel: "imessage" as const };
+  await routeInbound(msg, async (m) => {
     replies.push(m.text);
     await messenger.send(userId, m);
-  });
+  }, lastApprovalAsked(userId));
   return c.json({ replies });
 });
 core.post("/admin/advance-time", async (c) => c.json({ todo: "A", ...AdminAdvanceTime.parse(await c.req.json()) }, 501));
