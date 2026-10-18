@@ -1,10 +1,11 @@
 "use client";
-// MandateCard — a scoped agent spending mandate: cap progress, scope, expiry, and revoke.
-// DESIGN.md §6. Presentational; the caller wires onRevoke.
+// MandateCard — a scoped agent spending mandate rendered as a physical Visa card (DESIGN.md §6):
+// 1.586:1, dark metallic gradient (gold tint when active), EMV chip, VISA wordmark, •••• last4 in
+// Geist Mono, mandate label as the cardholder, MM/YY expiry, cap-usage bar along the bottom edge.
+// Revoked cards are desaturated with a REVOKED stamp. Presentational; the caller wires onRevoke.
 import type { Mandate } from "@alfred/shared";
 import { fmtUSD } from "@alfred/shared";
 import { cn } from "../cn";
-import { shortDate } from "../time";
 
 const AGENT_LABEL: Partial<Record<Mandate["agent"], string>> = {
   watcher: "Watcher",
@@ -13,11 +14,23 @@ const AGENT_LABEL: Partial<Record<Mandate["agent"], string>> = {
   orchestrator: "Alfred",
 };
 
-const STATUS_STYLE: Record<Mandate["status"], string> = {
-  active: "text-accent bg-accent-subtle",
-  revoked: "text-skip bg-skip/10",
-  expired: "text-text-muted bg-surface-2",
+const expMMYY = (d: Date | string) => {
+  const x = new Date(d);
+  if (Number.isNaN(x.getTime())) return "--/--";
+  return `${String(x.getUTCMonth() + 1).padStart(2, "0")}/${String(x.getUTCFullYear() % 100).padStart(2, "0")}`;
 };
+
+function Chip() {
+  return (
+    <div className="h-7 w-9 rounded-[4px] bg-gradient-to-b from-[#F0D98A] to-[#C8A24A]">
+      <div className="grid h-full w-full grid-cols-3 grid-rows-2 gap-px p-1 opacity-40">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="rounded-[1px] bg-black/40" />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function MandateCard({
   mandate,
@@ -30,58 +43,68 @@ export function MandateCard({
   onRevoke?: () => void;
   className?: string;
 }) {
-  const { label, agent, capCents, spentCents, categories, merchants, expiresAt, status, card } = mandate;
+  const { label, agent, capCents, spentCents, expiresAt, status, card } = mandate;
   const pct = capCents > 0 ? Math.min(100, Math.round((spentCents / capCents) * 100)) : 0;
-  const scope = [...categories, ...merchants];
+  const active = status === "active";
+  const revoked = status === "revoked";
 
   return (
-    <div className={cn("rounded-card-visual border border-border bg-surface p-5", className)}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="truncate text-[15px] font-medium">{label}</div>
-          <div className="mt-0.5 text-xs text-text-muted">
-            {AGENT_LABEL[agent] ?? agent}
-            {card?.last4 ? <> · ••{card.last4}</> : null}
+    <div className={cn("w-full", className)}>
+      <div
+        className={cn(
+          "relative flex aspect-[1.586] w-full flex-col justify-between overflow-hidden rounded-card-visual p-5 text-white shadow-lg",
+        )}
+        style={{
+          background: active
+            ? "linear-gradient(135deg, #3b3017 0%, #1b1813 45%, #2c2416 100%)"
+            : "linear-gradient(135deg, #2b2b30 0%, #151517 45%, #27272b 100%)",
+          filter: revoked ? "grayscale(1)" : undefined,
+        }}
+      >
+        <div className="flex items-start justify-between">
+          <Chip />
+          <span className="text-lg font-bold italic tracking-wider text-white/90">VISA</span>
+        </div>
+
+        <div className="font-mono text-xl tracking-[0.2em] text-white/95">•••• {card?.last4 ?? "0000"}</div>
+
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-wide text-white/50">{AGENT_LABEL[agent] ?? agent} mandate</div>
+            <div className="truncate text-sm font-medium uppercase tracking-wide">{label}</div>
+          </div>
+          <div className="shrink-0 text-right">
+            <div className="num text-xs text-white/90">
+              {fmtUSD(spentCents)} / {fmtUSD(capCents)}
+            </div>
+            <div className="mt-0.5 text-[9px] uppercase tracking-wide text-white/50">Exp {expMMYY(expiresAt)}</div>
           </div>
         </div>
-        <span className={cn("shrink-0 rounded-none px-2.5 py-0.5 text-xs font-medium capitalize", STATUS_STYLE[status])}>
-          {status}
-        </span>
-      </div>
 
-      <div className="mt-4">
-        <div className="flex items-baseline justify-between text-sm">
-          <span className="num">{fmtUSD(spentCents)}</span>
-          <span className="num text-text-muted">of {fmtUSD(capCents)}</span>
-        </div>
-        <div className="mt-1.5 h-1.5 overflow-hidden bg-surface-2">
+        {/* cap-usage bar along the bottom edge */}
+        <div className="absolute inset-x-0 bottom-0 h-1 bg-black/40">
           <div className={cn("h-full", pct >= 100 ? "bg-skip" : "bg-accent")} style={{ width: `${pct}%` }} />
         </div>
-      </div>
 
-      {scope.length ? (
-        <div className="mt-4 flex flex-wrap gap-1.5">
-          {scope.map((s) => (
-            <span key={s} className="rounded-none border border-border bg-surface-2 px-2.5 py-1 text-xs capitalize text-text-muted">
-              {s}
+        {revoked ? (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span className="-rotate-12 border-4 border-skip/80 px-3 py-1 text-xl font-black uppercase tracking-widest text-skip/80">
+              Revoked
             </span>
-          ))}
-        </div>
-      ) : null}
-
-      <div className="mt-4 flex items-center justify-between">
-        <span className="text-xs text-text-muted">Expires {shortDate(expiresAt)}</span>
-        {status === "active" ? (
-          <button
-            type="button"
-            onClick={onRevoke}
-            disabled={busy}
-            className="rounded-control border border-border px-3 py-1.5 text-sm font-medium text-skip transition-colors hover:bg-skip/10 disabled:opacity-50"
-          >
-            Revoke
-          </button>
+          </div>
         ) : null}
       </div>
+
+      {active ? (
+        <button
+          type="button"
+          onClick={onRevoke}
+          disabled={busy}
+          className="mt-2 text-xs font-medium text-text-muted underline-offset-2 transition-colors hover:text-skip disabled:opacity-50"
+        >
+          Revoke mandate
+        </button>
+      ) : null}
     </div>
   );
 }
