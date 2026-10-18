@@ -1,13 +1,14 @@
 // Owner: B. Agent routes (DESIGN.md §8.3). /rewards and /timekeeper are fixtures until MVP-2.
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import { bodyLimit } from "hono/body-limit";
 import * as fx from "@alfred/shared/fixtures";
 import { ChatRequest } from "@alfred/shared";
 import { z } from "zod";
 import { Cents } from "@alfred/shared";
 import { getVerdict, hasDb } from "../agents/data";
 import { createWatch, listWatches, startWatcher } from "../agents/watcher";
-import { handleUserMessage } from "../agents/orchestrator";
+import { handleUserMessage, MAX_IMAGE_BYTES } from "../agents/orchestrator";
 import { env } from "../env";
 
 export const agents = new Hono();
@@ -18,7 +19,10 @@ if (hasDb()) startWatcher();
 const CreateWatch = z.object({ productId: z.string(), targetPriceCents: Cents.positive(), surface: z.enum(["web", "extension", "imessage", "voice"]).optional() });
 
 // SSE: {delta}… then {done, verdictId?} (or {error} then {done}).
-agents.post("/chat", async (c) => {
+// Attachments can be data URLs; base64 is ~4/3 the image size, so leave room for one max-size image.
+const chatBodyLimit = bodyLimit({ maxSize: Math.ceil(MAX_IMAGE_BYTES * 1.4), onError: (c) => c.json({ error: "message too large (images up to 15 MB)" }, 413) });
+
+agents.post("/chat", chatBodyLimit, async (c) => {
   const req = ChatRequest.parse(await c.req.json());
   return streamSSE(c, async (stream) => {
     // Deltas arrive from SDK callbacks; chain the writes so they stay in order.
