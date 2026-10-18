@@ -2,3 +2,4 @@
 // Models: claude-opus-5-5 for reasoning/verdicts, claude-haiku-5-5 for bulk classification. Structured outputs for every Verdict.
 export { anthropic } from "./client";
 export { worthIt, type WorthItInput } from "./worthIt";
+export { createWatch, listWatches, checkWatches, startWatcher, type WatchView } from "./watcher";
