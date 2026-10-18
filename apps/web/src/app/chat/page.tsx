@@ -101,10 +101,12 @@ export default function Chat() {
   }
 
   // Same CTA states as Home: Watching > Bought > Watch for a drop.
+  const watchOf = (v: VerdictView) =>
+    wishlist.find((w) => w.productId === v.productId && (w.status === "watching" || w.status === "triggered"));
+
   function verdictCta(v: VerdictView) {
     const mine = wishlist.filter((w) => w.productId === v.productId);
-    const watching = mine.find((w) => w.status === "watching" || w.status === "triggered");
-    if (watching) return <StatePill tone="accent">Watching — buys at {fmtUSD(watching.targetPriceCents)}</StatePill>;
+    if (watchOf(v)) return null; // the card shows an eye + target price instead
     if (mine.some((w) => w.status === "bought")) return <StatePill tone="buy">Bought</StatePill>;
     return (
       <button
@@ -162,6 +164,7 @@ export default function Chat() {
                   verdict={v}
                   product={{ title: v.product?.title ?? "", imageUrl: v.product?.imageUrl }}
                   actions={verdictCta(v)}
+                  watchingCents={watchOf(v)?.targetPriceCents}
                   details={<VerdictGraphs verdict={v} />}
                 />
               </motion.div>
