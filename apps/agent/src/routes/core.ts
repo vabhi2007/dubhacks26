@@ -13,6 +13,7 @@ import { listMandates, revokeMandate } from "../core/mandates";
 import { resolveApproval } from "../core/purchase";
 import { subscribe } from "../core/sse";
 import { breakEvenFrom, getProductDetail, rankOffers } from "../core/products";
+import { fixtureProfile, getProfile } from "../core/profile";
 import { getStats } from "../core/stats";
 import { lastApprovalAsked, messenger } from "../messenger";
 import { routeInbound } from "../messenger/inbound";
@@ -62,7 +63,7 @@ core.get("/events", (c) =>
   }),
 );
 
-core.get("/profile", (c) => c.json({ todo: "A: spend by category/month, recurring merchants, totals" }));
+core.get("/profile", async (c) => c.json(live ? await getProfile(userId) : fixtureProfile()));
 core.get("/stats", async (c) => c.json(live ? await getStats(userId) : fx.stats));
 
 // Product page: { product, offers (ranked), priceHistory (90d, new/exact sellers), latestVerdict, watch, breakEven }.
