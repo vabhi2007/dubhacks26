@@ -152,12 +152,24 @@ async function persist(verdict: Verdict, surface: Surface) {
   }
 }
 
-/** History for the best offer's seller; if it has none (e.g. a fresh SerpAPI offer), the other exact new sellers. */
+/**
+ * Sellers whose price history may set the expected drop: only those with a new, exact-match offer for this product.
+ * price_history is keyed by seller alone, so used/refurb/variant-only sellers (eBay used, Breville refurb, …) would
+ * otherwise read as permanent "dips". The best offer's seller comes first when it qualifies.
+ */
+export function historySellers(best: Offer, offers: Offer[]): { own?: string; peers: string[] } {
+  const ok = (o: Offer) => o.condition === "new" && o.matched === "exact";
+  const peers = [...new Set(offers.filter(ok).map((o) => o.seller))];
+  return { own: ok(best) ? best.seller : undefined, peers };
+}
+
+/** History for the best offer's seller; if it has none (e.g. a fresh SerpAPI offer), the other new exact sellers. */
 async function sellerPriceStats(productId: string, best: Offer, offers: Offer[], now: Date) {
-  const own = await priceStats(productId, best.priceCents, [best.seller], now);
-  if (own) return own;
-  const peers = offers.filter((o) => o.matched === "exact" && o.condition === "new").map((o) => o.seller);
-  return peers.length ? priceStats(productId, best.priceCents, peers, now) : undefined;
+  const { own, peers } = historySellers(best, offers);
+  const mine = own ? await priceStats(productId, best.priceCents, [own], now) : undefined;
+  if (mine) return mine;
+  const others = peers.filter((s) => s !== own);
+  return others.length ? priceStats(productId, best.priceCents, others, now) : undefined;
 }
 
 async function judge(facts: object): Promise<z.infer<typeof Judgment>> {
