@@ -168,3 +168,28 @@ export function WatchButton({ agentUrl, product, verdict, status, onStatus }: {
     </div>
   );
 }
+
+/** "You might also like" — nearest products in meaning from /snap's `similar` (same category). */
+export function SimilarList({ products }: { products: Product[] }) {
+  if (!products.length) return null;
+  return (
+    <section>
+      <h2 className="mb-1.5 text-xs font-medium uppercase tracking-wide text-text-muted">You might also like</h2>
+      <ul className="grid grid-cols-2 gap-2">
+        {products.map((p) => (
+          <li key={p._id} className="flex items-center gap-2 rounded-card border border-border bg-surface p-2">
+            {p.imageUrl ? (
+              <img src={p.imageUrl} alt="" className="size-10 shrink-0 rounded-control border border-border object-cover" />
+            ) : (
+              <div aria-hidden className="size-10 shrink-0 rounded-control bg-surface-2" />
+            )}
+            <div className="min-w-0">
+              <div className="truncate text-xs font-medium">{p.title}</div>
+              <div className="truncate text-[11px] text-text-muted">{p.brand}</div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}

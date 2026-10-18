@@ -2,7 +2,7 @@
 // Local components use @alfred/ui tokens; swap for D's VerdictCard / OfferRow when they land.
 import { useEffect, useRef, useState } from "react";
 import { APP_NAME, SnapResponse } from "@alfred/shared";
-import { OfferList, ProductHeader, VerdictCard, WatchButton } from "./components";
+import { OfferList, ProductHeader, SimilarList, VerdictCard, WatchButton } from "./components";
 import { useWatchStatus } from "./watchStatus";
 
 const AGENT_URL = import.meta.env.WXT_AGENT_URL ?? "http://localhost:8787";
@@ -114,6 +114,7 @@ export default function App() {
           <VerdictCard verdict={result.verdict} />
           {canWatch && <WatchButton agentUrl={AGENT_URL} product={result.product} verdict={result.verdict} status={watch.status} onStatus={watch.setStatus} />}
           <OfferList offers={result.offers} bestOfferId={result.verdict.math.bestOfferId} />
+          <SimilarList products={result.similar} />
         </div>
       )}
     </main>
