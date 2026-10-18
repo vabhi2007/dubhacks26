@@ -35,7 +35,9 @@ export type PurchaseResult =
   | { status: "declined"; reason: string; approval: Approval }; // mandate said no → asked the human instead
 
 /** Internal order fields beyond the frozen Order contract. */
-type OrderDoc = Order & { savedCents: number; approvalId?: string; idempotencyKey?: string };
+// `seller` is kept on the order because live offers (ofs_*) are replaced on each SerpAPI refresh — the Returns tracker
+// needs to know where it was bought long after the offer is gone.
+type OrderDoc = Order & { savedCents: number; approvalId?: string; idempotencyKey?: string; seller?: string };
 
 type Ctx = { user: User; offer: Offer; product: Product; merchantId: string; cards: Card[] };
 
@@ -166,6 +168,7 @@ async function charge(a: ChargeArgs): Promise<{ order: Order; mandate: Mandate }
         _id: newId("ord"), userId: user._id, productId: product._id, offerId: offer._id, mandateId: mandate._id, cardId: card._id,
         amountCents: a.amountCents, rewardEarnedCents: rewardFor(card, product.category, a.amountCents), ts: now,
         savedCents: Math.max(0, refPrice - a.amountCents), approvalId: a.approval?.id, idempotencyKey: a.idempotencyKey,
+        seller: offer.seller,
       };
       await c.orders.insertOne(order, { session, ...OMIT_UNDEFINED });
       if (a.approval)

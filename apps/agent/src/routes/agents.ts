@@ -11,6 +11,7 @@ import { createWatch, listWatches, startWatcher } from "../agents/watcher";
 import { handleUserMessage, MAX_IMAGE_BYTES } from "../agents/orchestrator";
 import { timekeeper } from "../agents/timekeeper";
 import { enroll, rewardsScan } from "../agents/rewards";
+import { listReturns } from "../agents/returns";
 import { env } from "../env";
 
 export const agents = new Hono();
@@ -73,6 +74,9 @@ agents.post("/wishlist", async (c) => {
 agents.get("/rewards", async (c) => c.json(await rewardsScan(env.DEMO_USER_ID)));
 agents.post("/rewards/:programId/enroll", async (c) => c.json(await enroll(env.DEMO_USER_ID, c.req.param("programId"))));
 // Upgrade now vs wait, for the user's phone. ?productId= picks the upgrade target; ?refresh=1 skips the 6h reuse.
+// Every purchase with its (typical) return window, open ones first; flags price drops while a return is still possible.
+agents.get("/returns", async (c) => c.json(await listReturns(env.DEMO_USER_ID)));
+
 agents.get("/timekeeper", async (c) =>
   c.json(await timekeeper({ userId: env.DEMO_USER_ID, productId: c.req.query("productId") || undefined, refresh: c.req.query("refresh") === "1" })),
 );
