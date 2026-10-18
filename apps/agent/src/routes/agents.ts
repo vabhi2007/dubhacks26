@@ -6,7 +6,7 @@ import * as fx from "@alfred/shared/fixtures";
 import { ChatRequest } from "@alfred/shared";
 import { z } from "zod";
 import { Cents } from "@alfred/shared";
-import { getVerdict, hasDb } from "../agents/data";
+import { getVerdict, hasDb, listVerdicts } from "../agents/data";
 import { createWatch, listWatches, startWatcher } from "../agents/watcher";
 import { handleUserMessage, MAX_IMAGE_BYTES } from "../agents/orchestrator";
 import { env } from "../env";
@@ -43,6 +43,13 @@ agents.post("/chat", chatBodyLimit, async (c) => {
       await send({ done: true });
     }
   });
+});
+
+// Newest first (Home shows ?limit=1). Out-of-range or non-numeric limits are clamped rather than rejected.
+const VerdictList = z.object({ limit: z.coerce.number().int().catch(10).transform((n) => Math.min(50, Math.max(1, n))) });
+agents.get("/verdicts", async (c) => {
+  const { limit } = VerdictList.parse({ limit: c.req.query("limit") ?? 10 });
+  return c.json(await listVerdicts(env.DEMO_USER_ID, limit));
 });
 
 agents.get("/verdicts/:id", async (c) => {
