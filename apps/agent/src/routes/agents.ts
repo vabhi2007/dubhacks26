@@ -3,9 +3,10 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { bodyLimit } from "hono/body-limit";
 import { ChatRequest } from "@alfred/shared";
+import type { Product, Verdict } from "@alfred/shared";
 import { z } from "zod";
 import { Cents } from "@alfred/shared";
-import { getVerdict, hasDb, listVerdicts } from "../agents/data";
+import { getProduct, getProducts, getVerdict, hasDb, listVerdicts } from "../agents/data";
 import { createWatch, listWatches, startWatcher } from "../agents/watcher";
 import { handleUserMessage, MAX_IMAGE_BYTES } from "../agents/orchestrator";
 import { timekeeper } from "../agents/timekeeper";
@@ -48,14 +49,19 @@ agents.post("/chat", chatBodyLimit, async (c) => {
 
 // Newest first (Home shows ?limit=1). Out-of-range or non-numeric limits are clamped rather than rejected.
 const VerdictList = z.object({ limit: z.coerce.number().int().catch(10).transform((n) => Math.min(50, Math.max(1, n))) });
+// Attach display product info (title/imageUrl) so surfaces can label a verdict without a product route (#57).
+const withProduct = (v: Verdict, p?: Product) => ({ ...v, product: p ? { title: p.title, imageUrl: p.imageUrl } : undefined });
+
 agents.get("/verdicts", async (c) => {
   const { limit } = VerdictList.parse({ limit: c.req.query("limit") ?? 10 });
-  return c.json(await listVerdicts(env.DEMO_USER_ID, limit));
+  const vs = await listVerdicts(env.DEMO_USER_ID, limit);
+  const byId = new Map((await getProducts([...new Set(vs.map((v) => v.productId))])).map((p) => [p._id, p]));
+  return c.json(vs.map((v) => withProduct(v, byId.get(v.productId))));
 });
 
 agents.get("/verdicts/:id", async (c) => {
   const v = await getVerdict(c.req.param("id"));
-  return v ? c.json(v) : c.json({ error: "verdict not found" }, 404);
+  return v ? c.json(withProduct(v, await getProduct(v.productId))) : c.json({ error: "verdict not found" }, 404);
 });
 agents.get("/wishlist", async (c) => (hasDb() ? c.json(await listWatches(env.DEMO_USER_ID)) : c.json([])));
 agents.post("/wishlist", async (c) => {
