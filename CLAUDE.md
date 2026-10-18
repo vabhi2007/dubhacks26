@@ -34,7 +34,7 @@ Load the extension: `pnpm --filter @alfred/extension build`, then chrome://exten
 - TypeScript everywhere, ESM, Node ≥ 22. Validate every request body with the shared Zod schema.
 - Money is integer **cents**; format with `fmtUSD`. Ids are prefixed strings via `newId("prd")`.
 - Single `.env` at repo root (never commit it; `.env.example` lists everything). Browser code only sees `NEXT_PUBLIC_*` / `WXT_*`.
-- Agent service binds to 127.0.0.1 only; Photon reaches it through the cloudflared tunnel to `/webhooks/photon`.
+- Agent service binds to 127.0.0.1 only. Photon inbound uses the spectrum-ts stream; a cloudflared tunnel is a last resort and must follow DESIGN.md §12 (signature check, only `/webhooks/photon` reachable through it).
 - Money moves **only** through `authorize()` in `apps/agent/src/core/mandates.ts` — never let a prompt bypass it.
 - Anything user-visible the agent does → `emit()` an AgentEvent (`apps/agent/src/core/events.ts`).
 - Claude: `claude-opus-5-5` for reasoning/verdicts, `claude-haiku-5-5` for bulk classification. Anthropic TS SDK Tool Runner; structured outputs for every Verdict.

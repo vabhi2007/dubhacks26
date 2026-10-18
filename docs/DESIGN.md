@@ -48,7 +48,7 @@ Cross-surface rule: the **Verdict Card** and **Approval Card** look identical wh
 ```
  Extension ─┐                         ┌─> Anthropic (Opus 5.5 / Haiku 5.5)
  Web ───────┼─ REST + SSE ─> apps/agent (Hono :8787) ─┼─> Perceptron (vision)
- Photon ────┘  (webhook via cloudflared)              ├─> SerpAPI (prices)
+ Photon ────┘  (spectrum-ts stream; tunnel only if webhooks)  ├─> SerpAPI (prices)
                                 │                     └─> Voyage (embeddings)
                                 ▼
                        MongoDB Atlas (M0)
@@ -73,7 +73,7 @@ Cross-surface rule: the **Verdict Card** and **Approval Card** look identical wh
 | Embeddings | Voyage AI |
 | Vision | Perceptron API (localization, OCR, captioning) |
 | Prices | SerpAPI Google Shopping, gated by `PRICE_SOURCE=live\|cache\|mock` |
-| Messaging | Photon 2.0 (`spectrum-ts`), iMessage; cloudflared tunnel for webhooks |
+| Messaging | Photon 2.0 (`spectrum-ts`), iMessage. Inbound via the SDK's `app.messages` stream (no tunnel). cloudflared quick tunnel **only** if webhooks turn out to be required |
 | Voice (stretch) | Photon SMS number → SIP → Retell or ElevenLabs |
 
 ### Env (`.env`, never committed; `.env.example` checked in)
@@ -245,7 +245,7 @@ interface Embedder  { embed(texts: string[]): Promise<number[][]> }
 - Zod schemas + db client; **seed script** (personas, transactions, products, price history, cards/offers, rewards, T-Mobile data); indexes (time series, Atlas Search, Vector).
 - `authorize()` + `purchase()` guardrail, mandates/approvals/stats/profile routes.
 - Change streams → SSE `/events`; approvals listener → Messenger.
-- **Photon iMessage** Messenger (send, inbound webhook, photo download → `/snap`, YES/NO parsing → approvals) + cloudflared; `console` Messenger fallback.
+- **Photon iMessage** Messenger (send, inbound via `app.messages` stream, photo download → `/snap`, YES/NO parsing → approvals); `console` Messenger fallback. Tunnel only if webhooks are required — see §12.
 - `/admin` endpoints. **VEYZL**: connect repo early, run audit on the purchase/guardrail PR, record before/after.
 - *Stretch:* Photon Voice (S1).
 
@@ -297,5 +297,8 @@ interface Embedder  { embed(texts: string[]): Promise<number[][]> }
 
 ## 12. Open items
 - ~~Perceptron API~~ → resolved: `https://api.perceptron.inc/v1/chat/completions` (OpenAI-style, Bearer auth), model `perceptron-mk1.5`; images as `image_url` (URL or base64 data URL). Localization/OCR via prompting.
-- Photon `spectrum-ts` inbound mechanics (webhook vs socket) → confirm in beta docs.
+- Photon inbound: **prefer the `spectrum-ts` `app.messages` stream** (outbound connection, nothing exposed). Only if webhooks are required, A runs a cloudflared quick tunnel (`cloudflared tunnel --url http://127.0.0.1:8787`) from one laptop, with these rules:
+  - The URL changes on every restart → update `PUBLIC_TUNNEL_URL` and the Photon dashboard; one person owns it.
+  - The tunnel exposes the **whole** agent API. `/webhooks/photon` must verify Photon's signature/secret and reject everything else; requests arriving via the tunnel (check `cf-connecting-ip` / `Host`) are allowed **only** on `/webhooks/photon` — `/admin/*`, `/approvals`, etc. return 403.
+  - Run the tunnel only while testing or demoing iMessage.
 - Atlas M0 search-index limit → verify; fall back to `$regex` text match if needed.
