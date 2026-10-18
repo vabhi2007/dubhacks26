@@ -107,6 +107,7 @@ export default function Chat() {
   function verdictCta(v: VerdictView) {
     const mine = wishlist.filter((w) => w.productId === v.productId);
     if (watchOf(v)) return null; // the card shows an eye + target price instead
+    if (v.kind === "skip") return null; // Skip: a small drop won't make it worth it — no watch offer (same as the extension)
     if (mine.some((w) => w.status === "bought")) return <StatePill tone="buy">Bought</StatePill>;
     return (
       <button

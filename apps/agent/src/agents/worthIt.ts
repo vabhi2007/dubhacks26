@@ -11,7 +11,7 @@ import { smartPay } from "./smartPay";
 import { env } from "../env";
 import {
   bestOffer, getOffers, getProduct, getUser, MIN_DIPS, monthToDateSpend, priceStats, recentPurchases, spendByCategory,
-  type CategorySpend, type PastPurchase,
+  type CategorySpend, type PastPurchase, type PriceStats,
 } from "./data";
 
 export type WorthItInput = {
@@ -81,7 +81,8 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
       .filter((o) => o._id !== best._id)
       .slice(0, 5)
       .map((o) => ({ seller: o.seller, price: fmtUSD(o.priceCents), condition: o.condition, matched: o.matched })),
-    priceHistory90d: history && {
+    priceHistory: !history ? "none yet — these listings were first seen recently, so say nothing about past prices or trends" : {
+      daysOfHistory: history.days,
       low: fmtUSD(history.minCents),
       high: fmtUSD(history.maxCents),
       median: fmtUSD(history.medianCents),
@@ -95,7 +96,8 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
       : zeroBudget
         ? { category: product.category, monthly: "$0 — user chose not to spend in this category", spentThisMonth: fmtUSD(mtd) }
         : { category: product.category, monthly: fmtUSD(monthlyBudget), spentThisMonth: fmtUSD(mtd), priceAsPctOfMonthly: `${Math.round(budgetImpactPct! * 100)}%` },
-    spend12mo: spend.slice(0, 8).map((s) => ({
+    // Every category (≤ 14): a top-N cut made the model claim "no spending" in categories it simply wasn't shown.
+    spend12mo: spend.map((s) => ({
       category: s.category,
       total: fmtUSD(s.totalCents),
       perMonth: fmtUSD(Math.round(s.totalCents / 12)),
@@ -151,11 +153,16 @@ export function historySellers(best: Offer, offers: Offer[]): { own?: string; pe
 /** History for the best offer's seller; if it has none (e.g. a fresh SerpAPI offer), the other new exact sellers. */
 async function sellerPriceStats(productId: string, best: Offer, offers: Offer[], now: Date) {
   const { own, peers } = historySellers(best, offers);
-  const mine = own ? await priceStats(productId, best.priceCents, [own], now) : undefined;
+  // A seller first seen today (e.g. a fresh SerpAPI listing) has one point — that's not "flat for 90 days".
+  const enough = (s?: PriceStats) => (s && s.days >= MIN_HISTORY_DAYS && s.points >= 2 ? s : undefined);
+  const mine = enough(own ? await priceStats(productId, best.priceCents, [own], now) : undefined);
   if (mine) return mine;
   const others = peers.filter((s) => s !== own);
-  return others.length ? priceStats(productId, best.priceCents, others, now) : undefined;
+  return enough(others.length ? await priceStats(productId, best.priceCents, others, now) : undefined);
 }
+
+/** Below this much history, there's no trend to report (or to wait for). */
+const MIN_HISTORY_DAYS = 14;
 
 async function judge(facts: object): Promise<z.infer<typeof Judgment>> {
   if (!env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set");

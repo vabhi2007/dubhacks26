@@ -1,7 +1,7 @@
 // Owner: A. Demo control (DESIGN.md §3 "Demo control", §8.3 /admin/*). Hidden from the main nav; announce resets first.
 import { collections } from "@alfred/shared/db";
 import { seedDemo } from "@alfred/shared/seed";
-import type { AgentEvent, Offer } from "@alfred/shared";
+import { currentOffers, type AgentEvent, type Offer } from "@alfred/shared";
 import { HTTPException } from "hono/http-exception";
 import { emit } from "./events";
 import { usd } from "./util";
@@ -12,7 +12,10 @@ export async function priceDrop(userId: string, productId: string, newPriceCents
   const c = await collections();
   const [product, best] = await Promise.all([
     c.products.findOne({ _id: productId }, { projection: { embedding: 0 } }),
-    c.offers.find({ productId, condition: "new", matched: "exact", region: "US" }).sort({ priceCents: 1 }).limit(1).next(),
+    // Among the *current* offers (fresh live supersedes seeded) — re-pricing a superseded seeded offer would be a drop
+    // nobody else sees.
+    c.offers.find({ productId, condition: "new", matched: "exact", region: "US" }).toArray()
+      .then((os) => currentOffers(os).sort((a, b) => a.priceCents - b.priceCents)[0] ?? null),
   ]);
   if (!product || !best) throw new HTTPException(404, { message: `no new US offer for ${productId}` });
 

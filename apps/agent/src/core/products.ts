@@ -1,6 +1,6 @@
 // Owner: A. GET /products/:id — everything a product page needs in one call (DESIGN.md §8.3).
 import { collections } from "@alfred/shared/db";
-import type { Offer, Product, Verdict, WishlistItem } from "@alfred/shared";
+import { currentOffers, type Offer, type Product, type Verdict, type WishlistItem } from "@alfred/shared";
 import { HTTPException } from "hono/http-exception";
 import { requireId } from "./util";
 
@@ -43,7 +43,8 @@ export async function getProductDetail(productId: string, userId: string): Promi
   const c = await collections();
   const product = await c.products.findOne({ _id: requireId(productId, "productId") }, { projection: { embedding: 0 } });
   if (!product) throw new HTTPException(404, { message: `product ${productId} not found` });
-  const offers = rankOffers(await c.offers.find({ productId }).toArray());
+  // Current offers only (fresh live supersedes seeded), so this page shows the price the verdict and Watcher use.
+  const offers = rankOffers(currentOffers(await c.offers.find({ productId }).toArray()));
   const sellers = [...new Set(offers.filter((o) => o.condition === "new" && o.matched === "exact").map((o) => o.seller))];
   const [history, latestVerdict, watch] = await Promise.all([
     sellers.length

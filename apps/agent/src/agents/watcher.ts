@@ -14,8 +14,15 @@ export type WatchView = WishlistItem & { product?: Product; bestOffer?: Offer };
 /** Internal fields beyond the frozen WishlistItem contract: the approval a triggered watch is waiting on. */
 type WatchDoc = WishlistItem & { approvalId?: string };
 
-/** Create (or retarget) the user's watch on a product. If it's already at/below target, fires immediately. */
-export async function createWatch(a: { userId: string; productId: string; targetPriceCents: number; surface?: Surface }): Promise<WishlistItem> {
+/** What POST /wishlist returns: the watch, plus today's best price so callers can say when the target is already met. */
+export type WatchResult = WishlistItem & { bestPriceCents?: number; atOrBelowTarget?: boolean };
+
+/**
+ * Create (or retarget) the user's watch on a product. A watch only fires on a later price drop — never on creation:
+ * "watch for a drop" must not turn into a purchase request the moment it's clicked, even if the price already meets the
+ * target (it then reports `atOrBelowTarget`, and buying is the user's explicit choice).
+ */
+export async function createWatch(a: { userId: string; productId: string; targetPriceCents: number; surface?: Surface }): Promise<WatchResult> {
   const product = await getProduct(a.productId);
   if (!product) throw new HTTPException(404, { message: `unknown product ${a.productId}` });
   const c = await collections();
@@ -31,7 +38,7 @@ export async function createWatch(a: { userId: string; productId: string; target
       summary: `Updated your ${product.title} watch to ${usd(a.targetPriceCents)} — still waiting on your approval`,
       refs: { productId: a.productId, ...(existing.mandateId && { mandateId: existing.mandateId }) },
     });
-    return (await c.wishlist.findOne({ _id: existing._id })) ?? existing;
+    return { ...((await c.wishlist.findOne({ _id: existing._id })) ?? existing), ...(await priceVsTarget(a.productId, a.targetPriceCents)) };
   }
   const item: WishlistItem = {
     _id: existing?._id ?? newId("wsh"),
@@ -42,22 +49,24 @@ export async function createWatch(a: { userId: string; productId: string; target
     status: "watching",
   };
   await c.wishlist.replaceOne({ _id: item._id }, item, { upsert: true });
+  const now = await priceVsTarget(a.productId, a.targetPriceCents);
   await emit({
     userId: a.userId,
     agent: "watcher",
     surface: a.surface ?? "web",
     type: "watch_created",
-    summary: `Watching ${product.title} under ${usd(a.targetPriceCents)}${mandate ? ` · ${mandate.label} mandate` : " · will ask before buying"}`,
+    summary: `Watching ${product.title} under ${usd(a.targetPriceCents)}${
+      now.atOrBelowTarget ? ` — it's already ${usd(now.bestPriceCents!)}` : mandate ? ` · ${mandate.label} mandate` : " · will ask before buying"
+    }`,
     refs: { productId: a.productId, ...(mandate && { mandateId: mandate._id }) },
   });
+  return { ...item, ...now };
+}
 
-  try {
-    await checkWatches(a.userId, a.productId, `watch:${item._id}:created`);
-  } catch (e) {
-    // The watch is saved and announced; a failed first check shouldn't make POST /wishlist fail. The next drop retries.
-    console.error(`[watcher] immediate check for ${item._id} failed:`, (e as Error).message);
-  }
-  return (await c.wishlist.findOne({ _id: item._id })) ?? item;
+/** Today's best price (the same current offers the verdict used) against a watch target. */
+async function priceVsTarget(productId: string, targetPriceCents: number): Promise<{ bestPriceCents?: number; atOrBelowTarget?: boolean }> {
+  const best = bestOffer(await getOffers(productId));
+  return best ? { bestPriceCents: best.priceCents, atOrBelowTarget: best.priceCents <= targetPriceCents } : {};
 }
 
 export async function listWatches(userId: string): Promise<WatchView[]> {

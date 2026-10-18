@@ -2,6 +2,7 @@
 import * as fx from "@alfred/shared/fixtures";
 import { collections, merchantIdFor } from "@alfred/shared/db";
 import { SEARCH_INDEX, voyageEmbedder } from "@alfred/shared/embed";
+import { currentOffers } from "@alfred/shared";
 import type { Card, CardOffer, Category, Device, Enrollment, Offer, Product, RewardsProgram, TradeInCurve, User, Verdict } from "@alfred/shared";
 import { env } from "../env";
 import { withTimeout } from "../deal/timeout";
@@ -93,9 +94,10 @@ export async function getOffer(offerId: string): Promise<Offer | undefined> {
   return o ?? fx.offers.find((x) => x._id === offerId);
 }
 
+/** The product's current offers: the same rule as the deal agent and product page (fresh live supersedes seeded). */
 export async function getOffers(productId: string): Promise<Offer[]> {
   const o = await fromSeed((c) => c.offers.find({ productId }).toArray());
-  if (o?.length) return o;
+  if (o?.length) return currentOffers(o);
   return fx.offers.filter((x) => x.productId === productId);
 }
 
@@ -183,6 +185,7 @@ export async function monthToDateSpend(userId: string, category: Category, now =
 // ---------- price history ----------
 
 export type PriceStats = {
+  /** Days actually covered by the history (first point → now), at most 90 — not the window size. */
   days: number;
   points: number;
   minCents: number;
@@ -226,7 +229,7 @@ export async function priceStats(productId: string, refCents: number, sellers: s
   // Infrequent sales would vanish under a plain median, so measure the dips themselves.
   const dips = lows.filter((l) => l <= refCents * 0.95);
   return {
-    days: 90,
+    days: Math.min(90, Math.max(0, Math.round((now.getTime() - series[0]!.ts) / DAY))),
     points: series.length,
     minCents: prices[0]!,
     maxCents: prices.at(-1)!,
