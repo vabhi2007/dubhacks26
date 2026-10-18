@@ -1,46 +1,48 @@
 "use client";
-// Wishlist / Watcher — products Alfred is watching for a price drop (DESIGN.md F5).
-// Live data from GET /wishlist (joined with product + best offer); fixture only when offline.
+// Wishlist / Watcher — compact rows (DESIGN.md §6): name + current price + target on the left, a
+// small product image (monogram fallback) + › on the right, opening /wishlist/[productId].
+// Live data from GET /wishlist; fixture only when offline.
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { fmtUSD } from "@alfred/shared";
-import { cn } from "@alfred/ui";
 import { getWishlist, type WatchView } from "../../lib/api";
 
-const STATUS_STYLE: Record<WatchView["status"], string> = {
-  watching: "text-accent bg-accent-subtle",
-  triggered: "text-buy bg-buy/10",
-  bought: "text-text-muted bg-surface-2",
-  cancelled: "text-text-muted bg-surface-2",
-};
+const initials = (s: string) =>
+  s
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
 
 function WatchRow({ w }: { w: WatchView }) {
   const best = w.bestOffer?.priceCents;
-  const delta = best != null ? best - w.targetPriceCents : null; // >0 above target, <=0 at/below
   return (
-    <div className="flex items-center justify-between gap-4 rounded-card border border-border bg-surface p-5">
-      <div className="min-w-0">
-        <div className="truncate text-[15px] font-medium">{w.product?.title ?? w.productId}</div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-text-muted">
+    <Link
+      href={`/wishlist/${w.productId}`}
+      className="flex h-14 items-center gap-3 border border-border bg-surface px-4 transition-colors hover:bg-surface-2"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium">{w.product?.title ?? w.productId}</div>
+        <div className="mt-0.5 flex items-center gap-2 text-xs text-text-muted">
+          {best != null ? <span className="num text-text">{fmtUSD(best)}</span> : null}
+          <span aria-hidden>·</span>
           <span>
-            Target <span className="num text-text">{fmtUSD(w.targetPriceCents)}</span>
+            target <span className="num">{fmtUSD(w.targetPriceCents)}</span>
           </span>
-          {best != null ? (
-            <span>
-              Best now <span className="num text-text">{fmtUSD(best)}</span>
-              {w.bestOffer?.seller ? ` at ${w.bestOffer.seller}` : ""}
-            </span>
-          ) : null}
-          {delta != null ? (
-            <span className={cn("num", delta <= 0 ? "text-buy" : "text-text-muted")}>
-              {delta <= 0 ? `${fmtUSD(-delta)} under target` : `${fmtUSD(delta)} to go`}
-            </span>
-          ) : null}
         </div>
       </div>
-      <span className={cn("shrink-0 rounded-none px-2.5 py-0.5 text-xs font-medium capitalize", STATUS_STYLE[w.status])}>
-        {w.status}
-      </span>
-    </div>
+      {w.product?.imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={w.product.imageUrl} alt="" className="size-9 shrink-0 border border-border object-cover" />
+      ) : (
+        <div className="flex size-9 shrink-0 items-center justify-center bg-surface-2 text-xs font-medium text-text-muted">
+          {initials(w.product?.title ?? "?")}
+        </div>
+      )}
+      <ChevronRight size={16} className="shrink-0 text-text-muted" />
+    </Link>
   );
 }
 
@@ -52,20 +54,20 @@ export default function Wishlist() {
   }, []);
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 py-8">
+    <div className="mx-auto w-full max-w-3xl px-6 py-8">
       <h1 className="font-serif text-[28px] tracking-tight">Wishlist</h1>
       <p className="mt-1 text-sm text-text-muted">
-        Products Alfred is watching. When one drops to your target, it asks before buying.
+        Products Alfred is watching. Open one for its price history, break-even, and offers.
       </p>
 
       {watches === null ? null : watches.length ? (
-        <div className="mt-6 space-y-3">
+        <div className="mt-6 space-y-2">
           {watches.map((w) => (
             <WatchRow key={w._id} w={w} />
           ))}
         </div>
       ) : (
-        <div className="mt-6 rounded-card border border-border bg-surface p-6 text-sm text-text-muted">
+        <div className="mt-6 border border-border bg-surface p-6 text-sm text-text-muted">
           Nothing on your wishlist yet. Snap a product and tap “Watch for a drop.”
         </div>
       )}

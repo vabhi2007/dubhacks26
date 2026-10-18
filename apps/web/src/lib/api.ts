@@ -1,7 +1,7 @@
 // Typed client for the agent service (DESIGN.md §8.3).
 // Routes may be absent (connection refused) or stubbed (501) while teammates build —
 // readers fall back to @alfred/shared fixtures so the dashboard always renders.
-import type { Approval, ApprovalDecision, ChatRequest, Mandate, Order, Stats, Verdict, WishlistItem } from "@alfred/shared";
+import type { Approval, ApprovalDecision, ChatRequest, Mandate, Offer, Order, Product, Stats, Verdict, WishlistItem } from "@alfred/shared";
 import * as fx from "@alfred/shared/fixtures";
 
 export const AGENT_URL = process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8787";
@@ -140,6 +140,57 @@ export async function getProductInfo(id: string): Promise<{ title?: string; imag
     return null;
   }
 }
+
+// Full product page bundle from GET /products/:id (A) — everything /wishlist/[productId] needs in one call.
+export type PriceHistoryPoint = { ts: string; priceCents: number; seller: string };
+export type BreakEven = {
+  priceCents: number;
+  monthlySavingsCents: number;
+  months: { month: number; cumulativeSavingsCents: number }[];
+};
+export type ProductDetail = {
+  product: Product;
+  offers: Offer[]; // ranked, best first
+  priceHistory: PriceHistoryPoint[]; // 90d, oldest first
+  latestVerdict: Verdict | null;
+  watch: WishlistItem | null;
+  breakEven: BreakEven | null;
+};
+
+// Deterministic 90-day series (gentle wave + weekend dips, recent slide toward target) for the
+// offline fallback, so the detail charts still read without the agent.
+function synthHistory(): PriceHistoryPoint[] {
+  const base = 179_00;
+  const today = Date.now();
+  return Array.from({ length: 90 }, (_, k) => {
+    const i = 89 - k;
+    const ts = new Date(today - i * 86_400_000);
+    const dow = ts.getUTCDay();
+    const weekend = dow === 0 || dow === 6 ? -20_00 : 0;
+    const wave = Math.round(Math.sin(i / 7) * 12_00);
+    const recentSlide = i < 10 ? -20_00 : 0;
+    return { ts: ts.toISOString(), priceCents: Math.max(129_00, base + wave + weekend + recentSlide), seller: fx.offers[0].seller };
+  });
+}
+
+function fixtureDetail(): ProductDetail {
+  const monthly = Math.round((fx.verdict.math.relatedSpend12moCents ?? 0) / 12);
+  return {
+    product: fx.product,
+    offers: fx.offers,
+    priceHistory: synthHistory(),
+    latestVerdict: fx.verdict,
+    watch: { _id: "wsh_fixture", userId: "u_maya", productId: fx.product._id, targetPriceCents: 150_00, status: "watching" },
+    breakEven: {
+      priceCents: fx.verdict.math.priceCents,
+      monthlySavingsCents: monthly,
+      months: Array.from({ length: 10 }, (_, month) => ({ month, cumulativeSavingsCents: monthly * month })),
+    },
+  };
+}
+
+export const getProductDetail = (id: string) =>
+  withFallback<ProductDetail>(() => api(`/products/${id}`), fixtureDetail());
 
 // GET /rewards (B, #50): loyalty programs ranked by est. $/yr from the user's own merchant spend.
 export type RewardRecommendation = {

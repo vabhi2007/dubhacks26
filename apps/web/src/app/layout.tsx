@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { DM_Serif_Display, Geist, Geist_Mono, Inter_Tight } from "next/font/google";
 import { Toaster } from "sonner";
 import { APP_NAME, TAGLINE } from "@alfred/shared";
@@ -22,7 +23,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="h-full">
         <div className="flex h-full">
-          <Sidebar />
+          {/* usePathname() in Sidebar needs a Suspense boundary so dynamic routes (e.g. /wishlist/[productId]) can prerender. */}
+          <Suspense fallback={<aside className="w-56 shrink-0 border-r border-border bg-surface" />}>
+            <Sidebar />
+          </Suspense>
           <div className="flex min-w-0 flex-1 flex-col">
             <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-6">
               <p className="hidden text-sm text-text-muted sm:block">{TAGLINE}</p>
