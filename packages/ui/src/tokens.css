@@ -91,3 +91,8 @@
 @media (prefers-reduced-motion: reduce) {
   .enter-up, .stagger > * { animation: none; }
 }
+
+/* Horizontal bars grow from the left once on mount. */
+@keyframes alfred-grow-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.grow-x { transform-origin: left; animation: alfred-grow-x 600ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) { .grow-x { animation: none; } }
