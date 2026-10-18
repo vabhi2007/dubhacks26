@@ -24,6 +24,7 @@ import {
   resolveApproval,
 } from "../lib/api";
 import { useAgentEvent, useEvents } from "../lib/useEvents";
+import { VerdictGraphs } from "../components/VerdictGraphs";
 
 // Anything that moves money / changes stats or approvals (reset emits "message").
 const APPROVAL_EVENTS = new Set<AgentEvent["type"]>(["approval_requested", "approval_resolved", "purchase", "message"]);
@@ -162,7 +163,12 @@ export default function Home() {
   const watching = vpid
     ? wishlist.find((w) => w.productId === vpid && (w.status === "watching" || w.status === "triggered"))
     : undefined;
-  const verdictCta = !verdict ? null : bought ? (
+  // A Timekeeper verdict is about when to upgrade, not a price drop — link to its page instead of offering a watch.
+  const verdictCta = !verdict ? null : verdict.mode === "timekeeper" ? (
+    <Link href="/timekeeper" className="rounded-control border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-surface-2">
+      See the upgrade plan
+    </Link>
+  ) : bought ? (
     <StatePill tone="buy">
       Bought for {fmtUSD(bought.amountCents)}
       {bought.cardLast4 ? ` on ••${bought.cardLast4}` : ""}
@@ -200,6 +206,7 @@ export default function Home() {
                 verdict={verdict}
                 product={{ title: verdict.product?.title ?? verdictProductTitle(verdict.productId) ?? "", imageUrl: verdict.product?.imageUrl }}
                 actions={verdictCta}
+                details={<VerdictGraphs verdict={verdict} />}
               />
             ) : (
               <EmptyCard>No verdict yet — snap a product or ask Alfred whether something&rsquo;s worth it.</EmptyCard>
