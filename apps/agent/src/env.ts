@@ -7,6 +7,7 @@ config({ path: fileURLToPath(new URL("../../../.env", import.meta.url)), quiet: 
 const Env = z.object({
   MONGODB_URI: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_WORKSPACE_ID: z.string().optional(),
   SERPAPI_KEY: z.string().optional(),
   VOYAGE_API_KEY: z.string().optional(),
   PERCEPTRON_API_KEY: z.string().optional(),

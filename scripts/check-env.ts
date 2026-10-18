@@ -29,7 +29,8 @@ await check("MongoDB Atlas", true, ["MONGODB_URI"], async () => {
 });
 
 await check("Anthropic", true, ["ANTHROPIC_API_KEY"], async () => {
-  const m = await new Anthropic().models.retrieve("claude-opus-5-5");
+  const ws = process.env.ANTHROPIC_WORKSPACE_ID;
+  const m = await new Anthropic(ws ? { defaultHeaders: { "anthropic-workspace-id": ws } } : {}).models.retrieve("claude-opus-5-5");
   return `ok (${m.id})`;
 });
 
@@ -51,7 +52,13 @@ await check("Voyage AI", true, ["VOYAGE_API_KEY"], async () => {
   return `ok (dim ${d.data?.[0]?.embedding.length})`;
 });
 
-await check("Perceptron", true, ["PERCEPTRON_API_KEY"]); // TODO(C): live test once API shape is known (workshop)
+await check("Perceptron", true, ["PERCEPTRON_API_KEY"], async () => {
+  const base = process.env.PERCEPTRON_BASE_URL || "https://api.perceptron.inc/v1";
+  const r = await fetch(`${base}/models`, { headers: { authorization: `Bearer ${process.env.PERCEPTRON_API_KEY}` } });
+  const d = (await r.json()) as { data?: { id: string }[]; error?: { message: string } };
+  if (!r.ok) throw new Error(d.error?.message ?? `HTTP ${r.status}`);
+  return `ok (${d.data?.map((m) => m.id).join(", ")})`;
+});
 await check("Photon", true, ["PHOTON_API_KEY", "PHOTON_PROJECT_ID"]); // TODO(A): live test via spectrum-ts
 await check("cloudflared tunnel", false, ["PUBLIC_TUNNEL_URL"]);
 await check("Atlas Charts embed", false, ["ATLAS_CHARTS_BASE_URL", "ATLAS_CHARTS_SPEND_CHART_ID"]);

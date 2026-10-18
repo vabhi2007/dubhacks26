@@ -296,6 +296,6 @@ interface Embedder  { embed(texts: string[]): Promise<number[][]> }
 8. Close: one agent, every surface, always asks first.
 
 ## 12. Open items
-- Perceptron API specifics (from workshop) → fill `Vision` impl.
+- ~~Perceptron API~~ → resolved: `https://api.perceptron.inc/v1/chat/completions` (OpenAI-style, Bearer auth), model `perceptron-mk1.5`; images as `image_url` (URL or base64 data URL). Localization/OCR via prompting.
 - Photon `spectrum-ts` inbound mechanics (webhook vs socket) → confirm in beta docs.
 - Atlas M0 search-index limit → verify; fall back to `$regex` text match if needed.
