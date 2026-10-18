@@ -60,4 +60,4 @@ export const vision: Vision = providers.length
     }
   : mockVision;
 
-export { resolveProduct, type Resolution } from "./resolve";
+export { NEW_PRODUCT_PREFIX, resolveProduct, type Resolution } from "./resolve";

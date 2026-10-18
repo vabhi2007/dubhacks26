@@ -54,12 +54,35 @@ export function normalize(d: z.infer<typeof DetectionSchema>): Detection {
   };
 }
 
+/**
+ * Perceptron sometimes writes its box half in its native corner format: `"bbox": {"x": 213, "154", "w": 487, "h": 746}`
+ * (7 of 16 replies on one photo). The box isn't used to pick the product, so recover its four numbers in order.
+ */
+function repairBoxes(json: string): string {
+  return json.replace(/"bbox"\s*:\s*\{[^{}]*\}/g, (m) => {
+    try {
+      JSON.parse(m.slice(m.indexOf("{")));
+      return m;
+    } catch {
+      const [x = 0, y = 0, w = 0, h = 0] = (m.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+      return `"bbox": ${JSON.stringify({ x, y, w, h })}`;
+    }
+  });
+}
+
 /** Pull the JSON object out of a chat reply that may be wrapped in a ```json fence or prose. */
 export function parseDetectionText(text: string): Detection {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start < 0 || end <= start) throw new Error("no JSON object in reply");
-  return normalize(LenientDetection.parse(JSON.parse(text.slice(start, end + 1))));
+  const raw = text.slice(start, end + 1);
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    json = JSON.parse(repairBoxes(raw));
+  }
+  return normalize(LenientDetection.parse(json));
 }
 
 /** Sniff the image type from magic bytes; undefined = not an image we can send to a vision model. */
