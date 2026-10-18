@@ -3,6 +3,7 @@ import * as fx from "@alfred/shared/fixtures";
 import { collections } from "@alfred/shared/db";
 import type { Category, Offer, Product, User, Verdict } from "@alfred/shared";
 import { env } from "../env";
+import { withTimeout } from "../deal/timeout";
 
 const DAY = 86_400_000;
 
@@ -17,13 +18,25 @@ type Cols = Awaited<ReturnType<typeof collections>>;
 /** Seed-data read: Mongo only when SEED_SOURCE is "mongo"; undefined → caller uses fixtures. */
 const fromSeed = <T>(fn: (c: Cols) => Promise<T>) => (SEED_SOURCE === "mongo" ? tryDb(fn) : Promise.resolve(undefined));
 
-/** Read of data the agents write themselves (verdicts, wishlist) — always Mongo when configured. */
+// An unreachable Atlas would otherwise make every read wait out the driver's 30s server selection.
+// Each read is capped at DB_READ_MS; after a failure, reads skip Mongo for DB_BACKOFF_MS so one request
+// doesn't pay the cap once per read.
+const DB_READ_MS = 3_000;
+const DB_BACKOFF_MS = 30_000;
+let dbDownUntil = 0;
+
+/** Read of data the agents write themselves (verdicts, wishlist) — always Mongo when configured.
+ *  undefined = Mongo not configured, unreachable, or failed (callers fall back); a successful empty read is returned as-is. */
 async function tryDb<T>(fn: (c: Cols) => Promise<T>): Promise<T | undefined> {
-  if (!hasDb()) return undefined;
+  if (!hasDb() || Date.now() < dbDownUntil) return undefined;
   try {
-    return await fn(await collections());
+    return await withTimeout((async () => fn(await collections()))(), DB_READ_MS, "agents db read");
   } catch (e) {
-    console.warn("[agents] db read failed:", (e as Error).message);
+    const err = e as Error;
+    // Back off only when Mongo looks unreachable; a single bad query shouldn't switch every read to fixtures.
+    const unreachable = /timed out|ServerSelection|Network|ECONNREFUSED|ENOTFOUND/i.test(`${err.name} ${err.message}`);
+    if (unreachable) dbDownUntil = Date.now() + DB_BACKOFF_MS;
+    console.warn(`[agents] db read failed${unreachable ? `, using fixtures for ${DB_BACKOFF_MS / 1000}s` : ""}:`, err.message);
     return undefined;
   }
 }
@@ -137,11 +150,14 @@ export type PriceStats = {
   minCents: number;
   maxCents: number;
   medianCents: number;
-  /** The price you can realistically wait for: median of the dipped weeks' lows, else p25 of weekly lows. */
+  /** The price you can realistically wait for: median of the dipped weeks' lows when it dipped in ≥ 2 weeks, else p25 of weekly lows. */
   typicalLowCents: number;
   /** How many calendar weeks (Mon–Sun) dipped ≥5% below `refCents`. */
   dipsBelowRef: number;
 };
+
+/** Dipped weeks needed before a drop counts as expected. */
+export const MIN_DIPS = 2;
 
 /** 90-day stats for the given sellers only — mixing in used/refurb sellers would make every week look like a "dip". */
 export async function priceStats(productId: string, refCents: number, sellers: string[], now = new Date()): Promise<PriceStats | undefined> {
@@ -152,7 +168,9 @@ export async function priceStats(productId: string, refCents: number, sellers: s
       .sort({ ts: 1 })
       .toArray(),
   );
-  const series = pts?.length ? pts.map((p) => ({ ts: p.ts.getTime(), priceCents: p.priceCents })) : fallbackHistory(productId, now);
+  // Synthetic history only when Mongo isn't the source (fixtures mode, unconfigured, or unreachable). If Mongo answered
+  // with no points for these sellers, return undefined so the caller can try peer sellers.
+  const series = pts ? pts.map((p) => ({ ts: p.ts.getTime(), priceCents: p.priceCents })) : fallbackHistory(productId, now);
   if (!series.length) return undefined;
 
   const prices = series.map((p) => p.priceCents).sort((a, b) => a - b);
@@ -172,7 +190,8 @@ export async function priceStats(productId: string, refCents: number, sellers: s
     minCents: prices[0]!,
     maxCents: prices.at(-1)!,
     medianCents: median(prices),
-    typicalLowCents: dips.length ? median(dips) : lows[Math.floor(lows.length / 4)]!,
+    // One sale week is an anomaly, not a pattern to wait for.
+    typicalLowCents: dips.length >= MIN_DIPS ? median(dips) : lows[Math.floor(lows.length / 4)]!,
     dipsBelowRef: dips.length,
   };
 }
