@@ -9,7 +9,8 @@ import { ChevronLeft } from "lucide-react";
 import { fmtUSD } from "@alfred/shared";
 import { VerdictCard } from "@alfred/ui";
 import { getProductDetail, type ProductDetail } from "../../../lib/api";
-import { BreakEvenChart, OffersStrip, PriceHistoryChart } from "../../../components/productCharts";
+import { BreakEvenChart, PriceHistoryChart } from "../../../components/productCharts";
+import { DealRows } from "../../../components/DealRows";
 
 const initials = (title: string) =>
   title
@@ -102,7 +103,7 @@ function ProductDetail() {
         ) : null}
 
         <SectionCard label="Offers">
-          <OffersStrip offers={offers} />
+          <DealRows offers={offers} bestOfferId={latestVerdict?.math.bestOfferId} />
         </SectionCard>
       </div>
     </div>

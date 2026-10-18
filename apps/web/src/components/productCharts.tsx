@@ -14,7 +14,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { Offer } from "@alfred/shared";
 import { fmtUSD } from "@alfred/shared";
 import { useChartEntrance } from "@alfred/ui";
 import type { BreakEven, PriceHistoryPoint } from "../lib/api";
@@ -98,52 +97,6 @@ export function BreakEvenChart({ breakEven }: { breakEven: BreakEven }) {
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-    </div>
-  );
-}
-
-const CONDITION_COLOR: Record<Offer["condition"], string> = {
-  new: "var(--accent)",
-  refurb: "var(--wait)",
-  used: "var(--text-muted)",
-};
-
-// Offers on one price axis; best offer (first ranked) highlighted.
-export function OffersStrip({ offers }: { offers: Offer[] }) {
-  if (!offers.length) return <p className="py-2 text-sm text-text-muted">No offers found.</p>;
-  const prices = offers.map((o) => o.priceCents);
-  const min = Math.min(...prices);
-  const max = Math.max(...prices);
-  const span = max - min || 1;
-  const pos = (c: number) => ((c - min) / span) * 100;
-
-  return (
-    <div>
-      <div className="relative h-10">
-        <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border" />
-        {offers.map((o, i) => (
-          <div
-            key={o._id}
-            title={`${o.seller} · ${fmtUSD(o.priceCents)} · ${o.condition}`}
-            className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
-            style={{ left: `${pos(o.priceCents)}%` }}
-          >
-            <span
-              className={i === 0 ? "block size-3 ring-2 ring-surface" : "block size-2"}
-              style={{ background: CONDITION_COLOR[o.condition] }}
-            />
-          </div>
-        ))}
-        <span className="num absolute left-0 top-0 text-[11px] text-text-muted">{fmtUSD(min)}</span>
-        <span className="num absolute right-0 top-0 text-[11px] text-text-muted">{fmtUSD(max)}</span>
-      </div>
-      <div className="mt-2 flex gap-3 text-[11px] text-text-muted">
-        {(["new", "refurb", "used"] as const).map((c) => (
-          <span key={c} className="inline-flex items-center gap-1.5 capitalize">
-            <span className="size-2" style={{ background: CONDITION_COLOR[c] }} /> {c}
-          </span>
-        ))}
-      </div>
     </div>
   );
 }
