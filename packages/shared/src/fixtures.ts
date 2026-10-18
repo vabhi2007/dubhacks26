@@ -10,7 +10,7 @@ export const product: Product = {
   brand: "Breville",
   model: "BES450",
   category: "kitchen",
-  imageUrl: "https://placehold.co/400x400/141416/E2A829?text=Bambino",
+  imageUrl: "https://assets.breville.com/cdn-cgi/image/width=600,format=auto/BES450/BES450BSS1BUS1/pdp.png",
   source: "mock",
   canonicalKey: "breville-bes450",
 };
