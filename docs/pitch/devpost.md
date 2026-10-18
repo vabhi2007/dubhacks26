@@ -32,7 +32,7 @@ Alfred is a personal shopping agent that works across your **browser, iMessage, 
 - **Prices:** SerpAPI Google Shopping, gated behind a live/cache/mock flag; **Voyage** embeddings power product and rewards matching via Atlas Vector Search.
 - **Messaging:** Photon 2.0 for iMessage (send, photo intake, YES/NO approvals) over an outbound stream — no inbound tunnel needed.
 - **Web:** Next.js (App Router) + Tailwind + shadcn/ui, dark-first fintech design system with a deep-gold accent; **browser extension** on WXT (MV3) sharing the same components.
-- **Trust tooling:** VEYZL ran on our purchase-guardrail PR and caught a real gap, which we fixed.
+- **Guardrails:** every purchase goes through `authorize()`, an atomic Mongo check of the agent's scoped card (cap, category, expiry, status). Over the confirm threshold it asks over iMessage or the web first.
 
 ## Challenges we ran into
 - Making spending **safe by construction** — the guardrail had to be atomic and impossible to talk around, which meant keeping money logic entirely in code and out of the prompt.
@@ -54,10 +54,10 @@ Trustworthy agentic commerce is mostly a **systems** problem, not a prompt probl
 - **SideShift** — turning creator product videos into shoppable, affiliate-attributed Alfred links (see `docs/pitch/sideshift-angle.md`).
 
 ## Built with
-TypeScript · Node 22 · Hono · Next.js · React · Tailwind · shadcn/ui · WXT · Anthropic Claude (Opus + Haiku) · Perceptron · Photon 2.0 · SerpAPI · Voyage AI · MongoDB Atlas · Turborepo · pnpm · VEYZL
+TypeScript · Node 22 · Hono · Next.js · React · Tailwind · shadcn/ui · WXT · Anthropic Claude (Opus + Haiku) · Perceptron · Photon 2.0 · SerpAPI · Voyage AI · MongoDB Atlas · Turborepo · pnpm
 
 ## Tracks
-Visa (primary) · Perceptron · Photon · T-Mobile · VEYZL · SideShift [confirm final list before submitting]
+Visa (primary) · Perceptron · Photon · T-Mobile · SideShift [confirm final list before submitting]
 
 ---
 **Links:** Demo video → `[link]` · Repo → `[link]` · Team → `[names]`

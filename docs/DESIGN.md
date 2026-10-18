@@ -15,7 +15,7 @@
 
 One **Spending Profile** (mock transaction history) powers every feature. Every action lands in one **Agent Feed**, regardless of surface (dashboard, extension, iMessage).
 
-Tracks targeted: **Visa** (main), **Perceptron** (perception), **Photon** (iMessage), **VEYZL**, **T-Mobile**, **SideShift** (pitch only). Stretch: **Photon Voice**.
+Tracks targeted: **Visa** (main), **Perceptron** (perception), **Photon** (iMessage), **T-Mobile**, **SideShift** (pitch only). Stretch: **Photon Voice**.
 
 ## 2. Features
 
@@ -23,7 +23,7 @@ Tracks targeted: **Visa** (main), **Perceptron** (perception), **Photon** (iMess
 |---|---|---|---|
 | F1 | **Snap & Find** | Screenshot/video frame (extension) or IRL photo (iMessage) → Perceptron localization + OCR → Claude resolves exact product → Deal agent finds best new/US price + labeled used/refurb + similar items | Visa, Perceptron |
 | F2 | **Worth-It Check** | Verdict **Buy / Wait / Skip** with plain-language reasons + math from history (e.g. payback vs 12-mo café spend, budget impact, duplicate ownership, likely price drop) | Visa, T-Mobile |
-| F3 | **Agent Mandates** | Scoped mock virtual cards per agent: cap, categories/merchants, expiry, confirm-above threshold. Atomic `authorize()`. Revocable from dashboard | Visa, VEYZL |
+| F3 | **Agent Mandates** | Scoped mock virtual cards per agent: cap, categories/merchants, expiry, confirm-above threshold. Atomic `authorize()`. Revocable from dashboard | Visa |
 | F4 | **Smart Pay** | At purchase, pick the card / card-linked offer maximizing value; running "earned by your agent" counter | Visa |
 | F5 | **Watcher** | Wishlist target prices → on drop, request approval and buy via mandate. Also flags price drops inside return window | Visa |
 | F6 | **Rewards Optimizer** | Mines merchant spend → recommends (simulated one-tap enroll) from ~15 curated programs with $/yr estimate | Visa |
@@ -63,7 +63,7 @@ Cross-surface rule: the **Verdict Card** and **Approval Card** look identical wh
 
 | Layer | Choice |
 |---|---|
-| Monorepo | pnpm workspaces + Turborepo, GitHub (VEYZL connected) |
+| Monorepo | pnpm workspaces + Turborepo, GitHub |
 | Web | Next.js (App Router), React, Tailwind v4, shadcn/ui (Radix), Motion, Recharts (shadcn charts), Sonner, Lucide, Geist |
 | Extension | WXT + React (MV3), Chrome side panel, shares `packages/ui` |
 | Agent service | Node 22, Hono, `@anthropic-ai/sdk`, Zod |
@@ -261,13 +261,13 @@ interface Embedder  { embed(texts: string[]): Promise<number[][]> }
 ## 9. Workstreams (4 owners)
 
 ### A — Platform, Data & Messaging
-**Owns:** `packages/shared`, `scripts/`, `apps/agent/src/core`, `apps/agent/src/messenger`, Atlas setup, VEYZL.
+**Owns:** `packages/shared`, `scripts/`, `apps/agent/src/core`, `apps/agent/src/messenger`, Atlas setup.
 - Monorepo scaffold, `.env.example`, Hono skeleton with route registration for others.
 - Zod schemas + db client; **seed script** (personas, transactions, products, price history, cards/offers, rewards, T-Mobile data); indexes (time series, Atlas Search, Vector).
 - `authorize()` + `purchase()` guardrail, mandates/approvals/stats/profile routes.
 - Change streams → SSE `/events`; approvals listener → Messenger.
 - **Photon iMessage** Messenger (send, inbound via `app.messages` stream, photo download → `/snap`, YES/NO parsing → approvals); `console` Messenger fallback. Tunnel only if webhooks are required — see §12.
-- `/admin` endpoints. **VEYZL**: connect repo early, run audit on the purchase/guardrail PR, record before/after.
+- `/admin` endpoints.
 - *Stretch:* Photon Voice (S1).
 
 ### B — Agent Brain
@@ -305,7 +305,7 @@ interface Embedder  { embed(texts: string[]): Promise<number[][]> }
 | **MVP-0 — Core loop** | **~3–4h** | Dashboard Home shows stats, live Agent Feed (SSE), latest verdict, pending approvals. Extension snap → `/snap` (mock vision + mock/cached prices) → **real Claude Worth-It verdict** in the side panel → Watch. `/admin` price drop → Watcher creates approval → approve on web → `purchase()` via mandate → feed + stats update live. iMessage = console. |
 | **MVP-1 — Real inputs & iMessage** | ~+3–4h | Perceptron vision live; SerpAPI live with cache + Haiku labeling; Atlas Search product resolution; Photon iMessage: approvals (YES/NO), photo intake → snap, verdict summaries; orchestrator + `/chat`. |
 | **MVP-2 — Feature breadth** | ~+3–4h | Rewards Optimizer (+ Vector Search), Smart Pay, Timekeeper (T-Mobile), Spending Profile charts, Wishlist + Mandates pages, region-select + video-frame snap. |
-| **MVP-3 — Polish & submit** | remaining | Motion pass, empty/loading/error states, reduced motion, demo reset reliable, VEYZL before/after, pitch + video, track submissions. |
+| **MVP-3 — Polish & submit** | remaining | Motion pass, empty/loading/error states, reduced motion, demo reset reliable, pitch + video, track submissions. |
 | *Stretch* | — | Photon Voice outbound approval call (S1). |
 
 ### MVP-0 scope per workstream
@@ -321,7 +321,7 @@ interface Embedder  { embed(texts: string[]): Promise<number[][]> }
 4. Admin: price drops to $149 → iMessage "Now $149. Buy on your Visa ••4821 (+$4.47 back)? YES/NO" → YES → Approval Card morphs to Receipt on dashboard, savings ticker +$100.
 5. Extension: pause a YouTube review of an iPhone → Snap → side panel Timekeeper: *"Wait 4 months — your trade-in only drops $40 and you still owe $210."*
 6. Rewards: "Join Starbucks Rewards — ~$54/yr from your habits" → one tap.
-7. Trust: show VEYZL finding (auto-buy lacked human-approval cap) → fix → passing check.
+7. Trust: on Mandates, revoke the Kitchen card → drop the price again → Alfred asks instead of buying (guardrails in code, not prompts).
 8. Close: one agent, every surface, always asks first.
 
 ## 12. Open items
