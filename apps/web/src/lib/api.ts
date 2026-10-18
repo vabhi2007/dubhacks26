@@ -140,3 +140,31 @@ export async function getProductInfo(id: string): Promise<{ title?: string; imag
     return null;
   }
 }
+
+// GET /rewards (B, #50): loyalty programs ranked by est. $/yr from the user's own merchant spend.
+export type RewardRecommendation = {
+  programId: string;
+  name: string;
+  perks: string[];
+  estAnnualValueCents: number;
+  status: "recommended" | "enrolled" | "dismissed";
+  spend12moCents: number;
+  visits12mo: number;
+  merchants: string[];
+  /** One line for the card: where the $/yr comes from. */
+  why: string;
+  fit?: number;
+};
+
+// Offline example mirroring the seed's u_maya, so the page still tells the story without the agent.
+const fixtureRewards: RewardRecommendation[] = [
+  { programId: "rwp_starbucks", name: "Starbucks Rewards", perks: ["2 Stars per $1 — a handcrafted drink every 100–200 Stars", "Free birthday drink"], estAnnualValueCents: 54_20, status: "recommended", spend12moCents: 404_45, visits12mo: 80, merchants: ["Starbucks"], why: "$404/yr at Starbucks × 13.4% back" },
+  { programId: "rwp_chipotle", name: "Chipotle Rewards", perks: ["Points on every order", "Free chips & guac on your birthday"], estAnnualValueCents: 31_50, status: "recommended", spend12moCents: 393_72, visits12mo: 20, merchants: ["Chipotle"], why: "$394/yr at Chipotle × 8% back" },
+  { programId: "rwp_tmobile_tuesdays", name: "T-Mobile Tuesdays", perks: ["Weekly freebies and partner deals"], estAnnualValueCents: 30_00, status: "enrolled", spend12moCents: 1020_00, visits12mo: 12, merchants: ["T-Mobile"], why: "$30/yr in perks — you already shop at T-Mobile" },
+];
+
+export const getRewards = () => withFallback<RewardRecommendation[]>(() => api("/rewards"), fixtureRewards);
+
+// Simulated one-tap enroll (idempotent). Returns the program with status "enrolled".
+export const enrollReward = (programId: string) =>
+  api<RewardRecommendation>(`/rewards/${programId}/enroll`, { method: "POST", body: "{}" });
