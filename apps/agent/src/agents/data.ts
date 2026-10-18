@@ -2,7 +2,7 @@
 import * as fx from "@alfred/shared/fixtures";
 import { collections, merchantIdFor } from "@alfred/shared/db";
 import { SEARCH_INDEX, voyageEmbedder } from "@alfred/shared/embed";
-import type { Category, Device, Enrollment, Offer, Product, RewardsProgram, TradeInCurve, User, Verdict } from "@alfred/shared";
+import type { Card, CardOffer, Category, Device, Enrollment, Offer, Product, RewardsProgram, TradeInCurve, User, Verdict } from "@alfred/shared";
 import { env } from "../env";
 import { withTimeout } from "../deal/timeout";
 
@@ -86,6 +86,11 @@ export async function searchProducts(query: string, limit = 5, opts: { strict?: 
     .filter((r) => r.hits > 0 && (!opts.strict || r.hits >= Math.ceil(q.length / 2)))
     .sort((a, b) => b.hits - a.hits || a.len - b.len);
   return ranked.slice(0, limit).map((r) => r.p);
+}
+
+export async function getOffer(offerId: string): Promise<Offer | undefined> {
+  const o = await fromSeed((c) => c.offers.findOne({ _id: offerId }));
+  return o ?? fx.offers.find((x) => x._id === offerId);
 }
 
 export async function getOffers(productId: string): Promise<Offer[]> {
@@ -306,6 +311,27 @@ export async function rewardsRelevance(profile: string): Promise<Map<string, num
       .toArray(),
   );
   return new Map((rows ?? []).map((r) => [r._id, r.score]));
+}
+
+// ---------- cards & card-linked offers (Smart Pay) ----------
+
+// Mirrors the seed's u_maya cards so Smart Pay's mock path quotes the same "+$4.47 back on ••4821".
+const FALLBACK_CARDS: Omit<Card, "userId">[] = [
+  { _id: "crd_sig", network: "visa", name: "Visa Signature Rewards", last4: "4821", rewards: { kitchen: 0.03, home: 0.03, electronics: 0.02, default: 0.01 } },
+  { _id: "crd_dining", network: "visa", name: "Visa Dine & Sip", last4: "1177", rewards: { coffee: 0.04, dining: 0.04, entertainment: 0.02, default: 0.01 } },
+  { _id: "crd_cash", network: "visa", name: "Visa Everyday Cash", last4: "3090", rewards: { groceries: 0.03, transport: 0.02, default: 0.015 } },
+];
+
+export async function getCards(userId: string): Promise<Card[]> {
+  const rows = await fromSeed((c) => c.cards.find({ userId }).toArray());
+  if (rows) return rows;
+  return userId === "u_maya" ? FALLBACK_CARDS.map((c) => ({ ...c, userId })) : [];
+}
+
+/** Unexpired card-linked offers on these cards. */
+export async function getCardOffers(cardIds: string[], now = new Date()): Promise<CardOffer[]> {
+  if (!cardIds.length) return [];
+  return (await fromSeed((c) => c.cardOffers.find({ cardId: { $in: cardIds }, expiresAt: { $gt: now } }).toArray())) ?? [];
 }
 
 // ---------- past purchases (duplicate-ownership check) ----------

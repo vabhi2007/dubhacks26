@@ -7,6 +7,7 @@ import type { AgentEvent, Mandate, Offer, Product, Surface, WishlistItem } from 
 import { emit, purchase, requestApproval, subscribe } from "../core";
 import { bestOffer, getOffers, getProduct, getProducts } from "./data";
 import { usd } from "./format";
+import { smartPay } from "./smartPay";
 
 export type WatchView = WishlistItem & { product?: Product; bestOffer?: Offer };
 
@@ -84,9 +85,12 @@ export async function checkWatches(userId: string, productId: string, trigger: s
     if (!claimed) continue;
     try {
       if (w.mandateId) {
+        // Smart Pay's card; purchase() only honors it when the mandate isn't bound to one of the user's cards.
+        const product = await getProduct(productId);
+        const pay = product ? await smartPay({ userId, seller: best.seller, category: product.category, amountCents: best.priceCents }).catch(() => undefined) : undefined;
         const r = await purchase({
           userId, offerId: best._id, mandateId: w.mandateId, agent: "watcher", surface: "system",
-          idempotencyKey: `watch:${w._id}:${trigger}`,
+          idempotencyKey: `watch:${w._id}:${trigger}`, ...(pay && { cardId: pay.cardId }),
         });
         if (r.status === "purchased") await c.wishlist.updateOne({ _id: w._id }, { $set: { status: "bought" }, $unset: { approvalId: "" } });
         // needs_approval / declined: purchase() created the approval; stay triggered until it resolves (or goes stale).
