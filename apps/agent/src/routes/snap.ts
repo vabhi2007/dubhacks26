@@ -5,7 +5,7 @@ import { fmtUSD, SnapRequest, SnapResponse } from "@alfred/shared";
 import { env } from "../env";
 import { emit } from "../core/events";
 import { NEW_PRODUCT_PREFIX, resolveProduct, sniffMime, vision } from "../vision";
-import { findOffers, getVerdict, rankOffers } from "../deal";
+import { getVerdict, priceProduct, rankOffers } from "../deal";
 
 export const snap = new Hono();
 
@@ -30,7 +30,7 @@ snap.post(
     const tVision = Date.now() - t0;
     const { product: resolved, identified, via } = await resolveProduct(detection, img);
     const tResolve = Date.now() - t0 - tVision;
-    const priced = await findOffers(resolved);
+    const priced = await priceProduct(resolved);
     const product = priced.product; // a product Claude named may have just been saved with live prices
     const offers = rankOffers(priced.offers);
     const inCatalog = identified && !product._id.startsWith(NEW_PRODUCT_PREFIX);

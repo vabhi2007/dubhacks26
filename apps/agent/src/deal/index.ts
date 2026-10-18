@@ -36,11 +36,16 @@ const validOffers = (rows: unknown[]) =>
     return o.success ? [o.data] : [];
   });
 
+/** Offers for a product (the orchestrator's entry point; same pricing as /snap). */
+export async function findOffers(product: Product): Promise<Offer[]> {
+  return (await priceProduct(product)).offers;
+}
+
 /**
- * Offers for a resolved product. Returns the product too: a product Claude named that isn't in the catalog yet is
+ * Offers for a resolved product, plus the product itself: a product Claude named that isn't in the catalog yet is
  * saved (source "serpapi") once live prices find it, so later snaps, watches and verdicts can refer to it.
  */
-export async function findOffers(product: Product): Promise<{ product: Product; offers: Offer[] }> {
+export async function priceProduct(product: Product): Promise<{ product: Product; offers: Offer[] }> {
   if (product._id === UNIDENTIFIED_ID) return { product, offers: [] };
   if (env.PRICE_SOURCE === "live" && canGoLive(product)) {
     try {
