@@ -151,7 +151,9 @@ function tools(ctx: Ctx) {
         const url = ctx.imageUrls[imageIndex];
         if (!url) return `No image at index ${imageIndex}.`;
         const img = await loadImage(url);
-        const product = await resolveProduct(await vision.detect(img));
+        const { product, identified } = await resolveProduct(await vision.detect(img));
+        if (!identified)
+          return `Couldn't match the photo to a catalog product. It looks like: "${product.title}". Ask the user what it is, or try find_product with those words.`;
         const offers = await offersFor(product);
         void emit({ userId, agent: "vision", surface, type: "snap", summary: `Identified ${product.title} from your photo`, refs: { productId: product._id } }).catch(() => {});
         return json({ product: productView(product), offers: offers.slice(0, 5).map(offerView) });
