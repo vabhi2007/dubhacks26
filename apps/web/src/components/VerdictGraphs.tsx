@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { fmtUSD, type Verdict } from "@alfred/shared";
 import { cn } from "@alfred/ui";
 import { getProductDetail, type ProductDetail } from "../lib/api";
-import { OfferBars } from "./OfferBars";
+import { DealRows } from "./DealRows";
 import { BreakEvenChart, PriceHistoryChart } from "./productCharts";
 import { TimekeeperChart } from "./TimekeeperChart";
 
@@ -71,7 +71,7 @@ function WorthItGraphs({ verdict }: { verdict: Verdict }) {
         </Graph>
       ) : null}
       <Graph title="Offers" caption={offersCaption(verdict, detail)}>
-        <OfferBars offers={detail.offers} bestOfferId={m.bestOfferId} />
+        <DealRows offers={detail.offers} bestOfferId={m.bestOfferId} />
       </Graph>
     </Row>
   );
