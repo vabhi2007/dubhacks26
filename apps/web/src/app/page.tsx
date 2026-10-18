@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { AgentEvent, Stats, Verdict } from "@alfred/shared";
-import { fmtUSD } from "@alfred/shared";
+import { fmtUSD, watchTarget } from "@alfred/shared";
 import { events as fxEvents, product as fxProduct, verdict as fxVerdict } from "@alfred/shared/fixtures";
 import { ApprovalCard, type ApprovalState, FeedItem, MoneyStat, VerdictCard } from "@alfred/ui";
 import {
@@ -132,7 +132,11 @@ export default function Home() {
   }
 
   async function watch(v: Verdict) {
-    const target = v.math.priceCents;
+    const target = watchTarget(v.math.priceCents, v.math.expectedDropCents);
+    if (target === undefined) {
+      toast.error("No sensible watch target for this price");
+      return;
+    }
     try {
       await createWatch(v.productId, target);
       toast.success(`Watching — buys at ${fmtUSD(target)}`);
