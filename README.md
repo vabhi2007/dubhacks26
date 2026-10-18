@@ -13,4 +13,4 @@ pnpm check:env                # every required row should be ✅
 pnpm --filter @alfred/scripts setup-db
 pnpm dev                      # agent :8787 · web :3100 · extension dev
 ```
-Everything runs on fixtures with no keys at all (`PRICE_SOURCE=mock`, `VISION_SOURCE=claude`, `MESSENGER=console`), so you can start immediately.
+Everything runs on fixtures with no keys at all (`PRICE_SOURCE=mock`, `VISION_SOURCE=mock`, `MESSENGER=console`), so you can start immediately.

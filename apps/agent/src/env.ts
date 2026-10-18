@@ -17,7 +17,7 @@ const Env = z.object({
   PHOTON_PROJECT_ID: z.string().optional(),
   PUBLIC_TUNNEL_URL: z.string().optional(),
   PRICE_SOURCE: z.enum(["live", "cache", "mock"]).default("mock"),
-  VISION_SOURCE: z.enum(["perceptron", "claude"]).default("claude"),
+  VISION_SOURCE: z.enum(["perceptron", "claude", "mock"]).default("claude"),
   MESSENGER: z.enum(["photon", "console"]).default("console"),
   AGENT_PORT: z.coerce.number().default(8787),
   DEMO_USER_ID: z.string().default("u_maya"),
