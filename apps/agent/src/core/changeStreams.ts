@@ -1,19 +1,58 @@
 // Owner: A. Watches agent_events (→ SSE) and approvals (pending → Messenger). Requires MONGODB_URI.
-import { collections } from "@alfred/shared/db";
+// Every teammate's agent watches the same db, so side effects here run once per running agent — keep MESSENGER=console
+// everywhere except the one demo machine.
+import { collections, type ChangeStreamInsertDocument, type Collection, type Document } from "@alfred/shared/db";
+import type { Approval } from "@alfred/shared";
 import { broadcast } from "./sse";
+import { pickCard, rewardFor } from "./purchase";
+import { usd } from "./util";
 import { messenger } from "../messenger";
+
+/** Inserts only. Reopens after errors (with backoff), resuming from the last seen change when possible. */
+function watchInserts<T extends Document>(name: string, coll: Collection<T>, match: Document, onInsert: (doc: T) => unknown) {
+  let resumeAfter: unknown;
+  let failures = 0;
+  const open = () => {
+    const cs = coll.watch<T, ChangeStreamInsertDocument<T>>([{ $match: { operationType: "insert", ...match } }], resumeAfter ? { resumeAfter } : {});
+    cs.on("change", (ch) => {
+      resumeAfter = ch._id;
+      failures = 0;
+      Promise.resolve(onInsert(ch.fullDocument as T)).catch((e) => console.error(`[${name}] handler failed:`, (e as Error).message));
+    });
+    cs.on("error", (e) => {
+      failures++;
+      if (failures > 1) resumeAfter = undefined; // token may be stale — start fresh
+      const delay = Math.min(30_000, 1000 * 2 ** failures);
+      console.error(`[${name}] change stream error: ${e.message} — reopening in ${delay / 1000}s`);
+      cs.close().catch(() => {});
+      setTimeout(open, delay);
+    });
+  };
+  open();
+}
+
+async function approvalText(a: Approval) {
+  const c = await collections();
+  const [product, offer, mandate, cards] = await Promise.all([
+    a.productId ? c.products.findOne({ _id: a.productId }, { projection: { embedding: 0 } }) : null,
+    a.offerId ? c.offers.findOne({ _id: a.offerId }) : null,
+    a.mandateId ? c.mandates.findOne({ _id: a.mandateId }) : null,
+    c.cards.find({ userId: a.userId }).toArray(),
+  ]);
+  const card = product && cards.length ? pickCard(cards, product.category, mandate) : undefined;
+  const reward = card && product ? rewardFor(card, product.category, a.amountCents) : 0;
+  const last4 = mandate?.card.last4 ?? card?.last4;
+  const what = product ? `${product.title}${offer ? ` at ${offer.seller}` : ""}` : a.kind === "enroll" ? "Rewards enrollment" : "Purchase";
+  return {
+    text: `${what}: ${usd(a.amountCents)}. ${a.kind === "enroll" ? "Enroll" : `Buy on your Visa${last4 ? ` ••${last4}` : ""}`}${reward ? ` (+${usd(reward)} back)` : ""}? Reply YES ${a.shortCode} or NO ${a.shortCode}`,
+    imageUrl: product?.imageUrl,
+  };
+}
 
 export async function startChangeStreams() {
   const c = await collections();
-
-  c.agentEvents.watch([{ $match: { operationType: "insert" } }]).on("change", (ch) => {
-    if (ch.operationType === "insert") broadcast(ch.fullDocument);
-  });
-
-  c.approvals.watch([{ $match: { operationType: "insert", "fullDocument.status": "pending" } }]).on("change", async (ch) => {
-    if (ch.operationType !== "insert") return;
-    const a = ch.fullDocument;
-    // TODO(A): richer copy + product name + Smart Pay reward line
-    await messenger.send(a.userId, { text: `Approve $${(a.amountCents / 100).toFixed(2)}? Reply YES ${a.shortCode} or NO ${a.shortCode}` });
-  });
+  watchInserts("agent_events", c.agentEvents, {}, broadcast);
+  watchInserts("approvals", c.approvals, { "fullDocument.status": "pending", "fullDocument.channel": { $ne: "web" } }, async (a) =>
+    messenger.send(a.userId, await approvalText(a)),
+  );
 }
