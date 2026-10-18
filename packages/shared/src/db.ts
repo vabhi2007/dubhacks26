@@ -36,8 +36,9 @@ export function getDb(): Promise<Db> {
   return (dbPromise ??= (async () => {
     const uri = process.env.MONGODB_URI;
     if (!uri) throw new Error("MONGODB_URI is not set");
-    // ignoreUndefined: optional fields left `undefined` are omitted instead of stored as null (Zod `.optional()` rejects null).
-    client = new MongoClient(uri, { appName: "alfred", ignoreUndefined: true });
+    // Driver default ignoreUndefined=false on purpose: a filter like { _id: undefined } then matches nothing (null) instead of
+    // being dropped to {} and matching an arbitrary doc. To omit undefined optional fields on insert, pass { ignoreUndefined: true }.
+    client = new MongoClient(uri, { appName: "alfred" });
     await client.connect();
     return client.db(process.env.MONGODB_DB ?? "alfred");
   })().catch((e) => {
