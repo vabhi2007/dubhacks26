@@ -1,5 +1,6 @@
 // Owner: C. Snap & Find (DESIGN.md §8.3): image → vision → product → offers → Worth-It verdict.
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { fmtUSD, SnapRequest, SnapResponse } from "@alfred/shared";
 import { env } from "../env";
 import { emit } from "../core/events";
@@ -8,29 +9,46 @@ import { findOffers, getVerdict, rankOffers } from "../deal";
 
 export const snap = new Hono();
 
-snap.post("/snap", async (c) => {
-  const req = SnapRequest.parse(await c.req.json());
-  const img = Uint8Array.from(Buffer.from(req.image.replace(/^data:[^,]*,/, ""), "base64"));
-  const userId = env.DEMO_USER_ID;
+const MAX_BODY_BYTES = 15 * 1024 * 1024; // full-tab retina PNG as base64 fits comfortably
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
-  const t0 = Date.now();
-  const detection = await vision.detect(img);
-  const product = await resolveProduct(detection);
-  const offers = rankOffers(await findOffers(product));
-  const verdict = await getVerdict({ userId, product, offers, surface: req.source });
-  console.log(`snap: ${product._id} · ${offers.length} offers · ${verdict.kind} · ${Date.now() - t0}ms`);
+snap.post(
+  "/snap",
+  bodyLimit({ maxSize: MAX_BODY_BYTES, onError: (c) => c.json({ error: "image too large (max 15 MB)" }, 413) }),
+  async (c) => {
+    const body = await c.req.json().catch(() => undefined);
+    if (body === undefined) return c.json({ error: "body must be JSON" }, 400);
+    const req = SnapRequest.parse(body);
+    const b64 = req.image.replace(/^data:[^,]*,/, "").replace(/\s/g, "");
+    if (!BASE64.test(b64)) return c.json({ error: "image must be non-empty base64 (or a base64 data URL)" }, 400);
+    const img: Uint8Array = Buffer.from(b64, "base64");
+    const userId = env.DEMO_USER_ID;
 
-  if (env.MONGODB_URI) {
-    const best = offers.find((o) => o.condition === "new");
-    emit({
-      userId,
-      agent: "vision",
-      surface: req.source,
-      type: "snap",
-      summary: `Identified ${product.title}${best ? ` — best new ${fmtUSD(best.priceCents)} at ${best.seller}` : ""}`,
-      refs: { productId: product._id, verdictId: verdict._id },
-    }).catch((e) => console.warn("snap: emit failed:", e.message));
-  }
+    const t0 = Date.now();
+    const detection = await vision.detect(img);
+    const product = await resolveProduct(detection);
+    const offers = rankOffers(await findOffers(product));
+    const { verdict, saved } = await getVerdict({ userId, product, offers, surface: req.source });
+    console.log(`snap: ${product._id} · ${offers.length} offers · ${verdict.kind}${saved ? "" : " (neutral)"} · ${Date.now() - t0}ms`);
 
-  return c.json(SnapResponse.parse({ product, offers, similar: [], verdict }));
-});
+    if (env.MONGODB_URI) {
+      const best = offers.find((o) => o._id === verdict.math.bestOfferId);
+      emit({
+        userId,
+        agent: "vision",
+        surface: req.source,
+        type: "snap",
+        summary: `Identified ${product.title}${best ? ` — best ${best.condition} ${fmtUSD(best.priceCents)} at ${best.seller}` : ""}`,
+        refs: { productId: product._id, ...(saved && { verdictId: verdict._id }) },
+      }).catch((e) => console.warn("snap: emit failed:", e.message));
+    }
+
+    // Product/offer rows are validated where they're read; a failure here is our bug, not the client's.
+    const res = SnapResponse.safeParse({ product, offers, similar: [], verdict });
+    if (!res.success) {
+      console.error("snap: invalid response:", res.error.message);
+      return c.json({ error: "snap produced an invalid response" }, 500);
+    }
+    return c.json(res.data);
+  },
+);

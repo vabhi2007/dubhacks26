@@ -1,8 +1,9 @@
 // Owner: C. PRICE_SOURCE=live (SerpAPI → cache) | cache (Mongo) | mock (fixtures).
 import * as fx from "@alfred/shared/fixtures";
-import type { Offer, PriceSource, Product, RawOffer } from "@alfred/shared";
+import { Offer, type PriceSource, type Product, type RawOffer } from "@alfred/shared";
 import { collections } from "@alfred/shared/db";
 import { env } from "../env";
+import { withTimeout } from "./timeout";
 
 export const mockPriceSource: PriceSource = {
   async search() {
@@ -13,19 +14,26 @@ export const mockPriceSource: PriceSource = {
 // TODO(C, MVP-1): SerpAPI google_shopping + Haiku labeling (exact/variant/different, new/used/refurb, region).
 export const priceSource: PriceSource = mockPriceSource;
 
-/** Offers for a resolved product. cache/live read Mongo `offers`; empty → mock so the loop never dead-ends. */
+/** Fixture offers exist only for the hero product; anything else has no mock prices. */
+const mockOffers = (product: Product): Offer[] => (product._id === fx.product._id ? fx.offers : []);
+
+/** Offers for a resolved product. cache/live read Mongo `offers` (invalid rows dropped); empty or unreachable → mock. */
 export async function findOffers(product: Product): Promise<Offer[]> {
   if (env.PRICE_SOURCE !== "mock" && env.MONGODB_URI) {
     try {
-      const c = await collections();
-      const cached = await c.offers.find({ productId: product._id }).toArray();
+      const rows = await withTimeout(collections().then((c) => c.offers.find({ productId: product._id }).toArray()), undefined, "offer lookup");
+      const cached = rows.flatMap((r) => {
+        const o = Offer.safeParse(r);
+        if (!o.success) console.warn(`findOffers: dropping invalid offer ${String(r._id)}`);
+        return o.success ? [o.data] : [];
+      });
       if (cached.length) return cached;
       console.warn(`findOffers: no cached offers for ${product._id}, using mock`);
     } catch (e) {
       console.warn("findOffers: db lookup failed, using mock:", (e as Error).message);
     }
   }
-  return fx.offers.map((o) => ({ ...o, productId: product._id }));
+  return mockOffers(product);
 }
 
 const tier = (o: Offer) => (o.matched === "exact" && o.condition === "new" && o.region === "US" ? 0 : o.condition === "new" ? 1 : 2);
