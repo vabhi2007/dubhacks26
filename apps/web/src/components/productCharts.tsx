@@ -1,6 +1,6 @@
 "use client";
 // Product-detail charts (DESIGN.md §6 data-viz). Colors from tokens (CSS vars work as SVG paint),
-// minimal axes, key number labeled, money tooltips. One-time entrance motion lands in a later PR.
+// minimal axes, key number labeled, money tooltips. Lines draw in and bars grow once (useChartEntrance).
 import {
   Bar,
   BarChart,
@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import type { Offer } from "@alfred/shared";
 import { fmtUSD } from "@alfred/shared";
+import { useChartEntrance } from "@alfred/ui";
 import type { BreakEven, PriceHistoryPoint } from "../lib/api";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -39,6 +40,7 @@ const tooltipStyle = {
 
 // Price history (90d): best price per day, gold line, dashed target line, dot at today.
 export function PriceHistoryChart({ history, targetCents }: { history: PriceHistoryPoint[]; targetCents?: number }) {
+  const entrance = useChartEntrance(700);
   const byDay = new Map<string, number>();
   for (const p of history) {
     const k = dayLabel(p.ts);
@@ -63,7 +65,7 @@ export function PriceHistoryChart({ history, targetCents }: { history: PriceHist
             label={{ value: `Target ${usd(targetCents)}`, position: "insideBottomLeft", fill: "var(--text-muted)", fontSize: 11 }}
           />
         ) : null}
-        <Line type="monotone" dataKey="price" stroke="var(--accent)" strokeWidth={2} dot={false} isAnimationActive={false} />
+        <Line type="monotone" dataKey="price" stroke="var(--accent)" strokeWidth={2} dot={false} {...entrance} />
         <ReferenceDot x={last.label} y={last.price} r={4} fill="var(--accent)" stroke="var(--surface)" strokeWidth={2} />
       </LineChart>
     </ResponsiveContainer>
@@ -72,6 +74,7 @@ export function PriceHistoryChart({ history, targetCents }: { history: PriceHist
 
 // Break-even: cumulative monthly savings bars vs a cost line at the price; crossing month labeled.
 export function BreakEvenChart({ breakEven }: { breakEven: BreakEven }) {
+  const entrance = useChartEntrance();
   const data = breakEven.months.map((m) => ({ month: m.month, cum: m.cumulativeSavingsCents }));
   const crossing = breakEven.months.find((m) => m.cumulativeSavingsCents >= breakEven.priceCents)?.month;
 
@@ -97,7 +100,7 @@ export function BreakEvenChart({ breakEven }: { breakEven: BreakEven }) {
             strokeDasharray="4 4"
             label={{ value: `Cost ${usd(breakEven.priceCents)}`, position: "insideTopLeft", fill: "var(--text-muted)", fontSize: 11 }}
           />
-          <Bar dataKey="cum" isAnimationActive={false}>
+          <Bar dataKey="cum" {...entrance}>
             {data.map((d) => (
               <Cell key={d.month} fill={crossing != null && d.month >= crossing ? "var(--buy)" : "var(--accent)"} />
             ))}

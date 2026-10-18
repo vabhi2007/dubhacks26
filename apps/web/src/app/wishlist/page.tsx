@@ -61,7 +61,7 @@ export default function Wishlist() {
       </p>
 
       {watches === null ? null : watches.length ? (
-        <div className="mt-6 space-y-2">
+        <div className="stagger mt-6 space-y-2">
           {watches.map((w) => (
             <WatchRow key={w._id} w={w} />
           ))}

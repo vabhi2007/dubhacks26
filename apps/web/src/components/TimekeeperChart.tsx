@@ -3,6 +3,7 @@
 // Self-contained (props in, no fetching) so it can move into @alfred/ui for the extension; recharts is a web-only
 // dependency today. No entrance animation: motion only on state change (§6).
 import { CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useChartEntrance } from "@alfred/ui";
 import { fmtUSD } from "@alfred/shared";
 
 type Point = { month: number; valueCents: number };
@@ -10,6 +11,7 @@ type Point = { month: number; valueCents: number };
 const monthLabel = (m: number) => (m === 0 ? "Now" : `+${m}mo`);
 
 export function TimekeeperChart({ series, waitMonths, className }: { series: Point[]; waitMonths: number; className?: string }) {
+  const entrance = useChartEntrance(700);
   const data = series.map((p) => ({ month: p.month, value: p.valueCents / 100 }));
   const at = (m: number) => data.find((d) => d.month === m)?.value;
   const now = at(0);
@@ -64,7 +66,7 @@ export function TimekeeperChart({ series, waitMonths, className }: { series: Poi
             />
           ) : null}
           {/* Straight segments: a trade-in cliff should look like one. */}
-          <Line type="linear" dataKey="value" stroke="var(--text)" strokeWidth={1.75} dot={false} isAnimationActive={false} />
+          <Line type="linear" dataKey="value" stroke="var(--text)" strokeWidth={1.75} dot={false} {...entrance} />
           {now != null ? <ReferenceDot x={0} y={now} r={4} fill="var(--text-muted)" stroke="none" /> : null}
           {waitMonths > 0 && later != null ? <ReferenceDot x={waitMonths} y={later} r={5} fill="var(--accent)" stroke="none" /> : null}
         </LineChart>

@@ -37,7 +37,7 @@ export default function Mandates() {
       </p>
 
       {mandates === null ? null : mandates.length ? (
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <div className="stagger mt-6 grid gap-4 sm:grid-cols-2">
           {mandates.map((m) => (
             <MandateCard key={m._id} mandate={m} busy={busyId === m._id} onRevoke={() => revoke(m)} />
           ))}

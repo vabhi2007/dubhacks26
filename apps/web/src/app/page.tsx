@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import type { AgentEvent, Stats, Verdict } from "@alfred/shared";
 import { fmtUSD, watchTarget } from "@alfred/shared";
 import { events as fxEvents, product as fxProduct, verdict as fxVerdict } from "@alfred/shared/fixtures";
-import { ApprovalCard, type ApprovalState, FeedItem, MoneyStat, VerdictCard } from "@alfred/ui";
+import { ApprovalCard, type ApprovalState, FeedItem, MoneyStat, useCountUp, VerdictCard } from "@alfred/ui";
 import {
   type ApiError,
   type ApprovalView,
@@ -36,10 +36,11 @@ const resolvedDesc = (a: ApprovalView, b: ApprovalView) =>
   new Date(b.resolvedAt ?? 0).getTime() - new Date(a.resolvedAt ?? 0).getTime();
 
 function CountStat({ label, value }: { label: string; value: number }) {
+  const shown = useCountUp(value);
   return (
     <div className="rounded-card border border-border bg-surface p-5">
       <div className="text-sm text-text-muted">{label}</div>
-      <div className="num mt-1.5 text-[28px] leading-none tracking-tight">{value}</div>
+      <div className="num mt-1.5 text-[28px] leading-none tracking-tight">{Math.round(shown)}</div>
     </div>
   );
 }
@@ -209,7 +210,7 @@ export default function Home() {
           <section>
             <SectionLabel>Pending approvals</SectionLabel>
             {pending.length ? (
-              <div className="space-y-3">
+              <div className="stagger space-y-3">
                 {pending.map((a) => (
                   <ApprovalCard
                     key={a._id}
@@ -259,7 +260,7 @@ export default function Home() {
           </div>
           <div className="rounded-card border border-border bg-surface px-5 py-1">
             {feed.length ? (
-              <ul className="divide-y divide-border">
+              <ul className="stagger divide-y divide-border">
                 {feed.map((e) => (
                   <FeedItem key={e._id} event={e} />
                 ))}

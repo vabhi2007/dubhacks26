@@ -69,7 +69,7 @@ export default function Rewards() {
           {recommended.length ? (
             <section className="mt-8">
               <SectionLabel>Recommended</SectionLabel>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="stagger grid gap-4 sm:grid-cols-2">
                 {recommended.map((r, i) => (
                   <RewardCard key={r.programId} reward={r} primary={i === 0} busy={busyId === r.programId} onEnroll={() => enroll(r)} />
                 ))}
@@ -80,7 +80,7 @@ export default function Rewards() {
           {enrolled.length ? (
             <section className="mt-8">
               <SectionLabel>You&apos;re in</SectionLabel>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="stagger grid gap-4 sm:grid-cols-2">
                 {enrolled.map((r) => (
                   <RewardCard key={r.programId} reward={r} />
                 ))}
