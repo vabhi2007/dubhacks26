@@ -2,7 +2,7 @@
 // live: fresh cached SerpAPI offers (< 24h) → else one SerpAPI search, Haiku-labeled, stored as the cache → on any
 // failure, whatever Mongo already has. Seeded offers are never modified; the frozen demo products never go live.
 import * as fx from "@alfred/shared/fixtures";
-import { Offer, type PriceSource, type Product, type RawOffer } from "@alfred/shared";
+import { currentOffers, LIVE_OFFER_PREFIX, LIVE_OFFER_TTL_MS, Offer, type PriceSource, type Product, type RawOffer } from "@alfred/shared";
 import { collections, newId } from "@alfred/shared/db";
 import { env } from "../env";
 import { LOOKUP_MS, withTimeout } from "./timeout";
@@ -22,8 +22,8 @@ export const priceSource: PriceSource = env.PRICE_SOURCE === "live" ? serpApiSou
 
 /** DESIGN.md §7: the hero products keep their seeded offers and price history so the demo script holds. */
 const FROZEN = new Set(["prd_bambino", "prd_iphone17"]);
-const LIVE_PREFIX = "ofs_"; // SerpAPI offers; seeded ones are ofr_*
-const LIVE_TTL_MS = 24 * 60 * 60_000;
+const LIVE_PREFIX = LIVE_OFFER_PREFIX; // SerpAPI offers; seeded ones are ofr_*
+const LIVE_TTL_MS = LIVE_OFFER_TTL_MS;
 const PAUSE_MS = 10 * 60_000;
 let livePausedUntil = 0; // set on quota / auth errors so we stop asking SerpAPI for a while
 
@@ -71,7 +71,8 @@ async function cachedOffers(product: Product): Promise<Offer[]> {
   if (env.PRICE_SOURCE !== "mock" && env.MONGODB_URI) {
     try {
       const rows = await withTimeout(collections().then((c) => c.offers.find({ productId: product._id }, { timeoutMS: LOOKUP_MS }).toArray()), undefined, "offer lookup");
-      const cached = validOffers(rows);
+      // Same rule as every other reader (verdicts, Watcher, product page): fresh live offers supersede seeded ones.
+      const cached = currentOffers(validOffers(rows));
       if (cached.length) return cached;
       console.warn(`findOffers: no cached offers for ${product._id}, using mock`);
     } catch (e) {
@@ -106,7 +107,8 @@ async function liveOffers(input: Product): Promise<{ product: Product; offers: O
   const different = labels.filter((l) => l.matched === "different").length;
   console.log(`findOffers: ${raw.length} results → ${kept.length} kept (${kept.filter((k) => k.l.matched === "exact").length} exact), ${different} different, ${sane.dropped.length} implausible · reference ${sane.ref ? `$${(sane.ref.cents / 100).toFixed(2)} (${sane.ref.basis})` : "none"}`);
   for (const d of sane.dropped) console.log(`  dropped $${(d.r.priceCents / 100).toFixed(2)} ${d.r.seller}: ${d.reason}`);
-  if (!kept.length) return { product, offers: [] };
+  // Nothing usable from this search: a catalog product keeps its stored offers (what the Watcher and product page see).
+  if (!kept.length) return { product, offers: product._id.startsWith(NEW_PRODUCT_PREFIX) ? [] : await cachedOffers(product) };
 
   if (product._id.startsWith(NEW_PRODUCT_PREFIX)) {
     const { _id: _, ...fields } = product;

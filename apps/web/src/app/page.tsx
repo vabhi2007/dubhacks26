@@ -177,7 +177,9 @@ export default function Home() {
       Bought for {fmtUSD(bought.amountCents)}
       {bought.cardLast4 ? ` on ••${bought.cardLast4}` : ""}
     </StatePill>
-  ) : watching ? null : ( // the card shows an eye + target price instead
+  ) : watching ? null // the card shows an eye + target price instead
+  : verdict.kind === "skip" ? null // Skip means a small drop won't make it worth it — don't offer a watch (same as the extension)
+  : (
     <button
       type="button"
       onClick={() => watch(verdict)}

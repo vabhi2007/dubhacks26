@@ -6,7 +6,7 @@
 // Approving re-enters charge() as the agent that asked: the human's YES satisfies (1); if that agent's mandate can't cover
 // it, the approval mints a single-use mandate for exactly that purchase, so money still only moves through authorize().
 import { collections, getClient, merchantIdFor, newId } from "@alfred/shared/db";
-import { AgentName, Surface, type Approval, type ApprovalDecision, type Card, type Mandate, type Offer, type Order, type Product, type User } from "@alfred/shared";
+import { AgentName, currentOffers, Surface, type Approval, type ApprovalDecision, type Card, type Mandate, type Offer, type Order, type Product, type User } from "@alfred/shared";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { pendingApproval, requestApproval, resolveWithoutPurchase, type ApprovalDoc } from "./approvals";
@@ -56,7 +56,8 @@ async function load(userId: string, offerId: string): Promise<Ctx> {
 /** "Typical" price for savings: median current price of new, exact-match US offers. */
 async function referencePrice(productId: string) {
   const c = await collections();
-  const prices = (await c.offers.find({ productId, condition: "new", matched: "exact", region: "US" }).toArray()).map((o) => o.priceCents).sort((a, b) => a - b);
+  // Current offers only (fresh live supersedes seeded), so "saved" is measured against the market the verdict saw.
+  const prices = currentOffers(await c.offers.find({ productId, condition: "new", matched: "exact", region: "US" }).toArray()).map((o) => o.priceCents).sort((a, b) => a - b);
   return prices[Math.floor(prices.length / 2)] ?? 0;
 }
 

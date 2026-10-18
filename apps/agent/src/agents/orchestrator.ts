@@ -218,12 +218,16 @@ function tools(ctx: Ctx) {
     }),
     betaZodTool({
       name: "create_watch",
-      description: "Watch a product's price. When the best price reaches the target, Alfred buys within the user's mandate or asks them to approve.",
+      description: "Watch a product's price. When the price later drops to the target, Alfred buys within the user's mandate or asks them to approve. If the price already meets the target, the result says so — then ask whether to buy now (buy tool); creating a watch never buys.",
       inputSchema: z.object({ productId: z.string(), targetPriceDollars: z.number().positive() }),
       run: async ({ productId, targetPriceDollars }) => {
         const w = await createWatch({ userId, productId, targetPriceCents: Math.round(targetPriceDollars * 100), surface });
-        ctx.turn.actions.push(`Watching ${(await getProduct(productId))?.title ?? productId} under ${usd(w.targetPriceCents)}${w.status === "bought" ? " (already bought: it was under target)" : ""}.`);
-        return json({ watchId: w._id, status: w.status, target: usd(w.targetPriceCents), mandate: w.mandateId ?? "none — will ask before buying" });
+        ctx.turn.actions.push(`Watching ${(await getProduct(productId))?.title ?? productId} under ${usd(w.targetPriceCents)}.`);
+        return json({
+          watchId: w._id, status: w.status, target: usd(w.targetPriceCents), mandate: w.mandateId ?? "none — will ask before buying",
+          ...(w.bestPriceCents != null && { bestPriceNow: usd(w.bestPriceCents) }),
+          ...(w.atOrBelowTarget && { note: "Already at or below the target. Nothing was bought; ask the user if they want to buy now." }),
+        });
       },
     }),
     betaZodTool({
