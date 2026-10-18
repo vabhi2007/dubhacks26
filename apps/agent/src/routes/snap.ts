@@ -4,12 +4,12 @@ import { bodyLimit } from "hono/body-limit";
 import { fmtUSD, SnapRequest, SnapResponse } from "@alfred/shared";
 import { env } from "../env";
 import { emit } from "../core/events";
-import { resolveProduct, vision } from "../vision";
+import { resolveProduct, sniffMime, vision } from "../vision";
 import { findOffers, getVerdict, rankOffers } from "../deal";
 
 export const snap = new Hono();
 
-const MAX_BODY_BYTES = 15 * 1024 * 1024; // full-tab retina PNG as base64 fits comfortably
+const MAX_BODY_BYTES = 15 * 1024 * 1024; // the extension sends a downscaled JPEG; iMessage photos fit too
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
 snap.post(
@@ -22,14 +22,16 @@ snap.post(
     const b64 = req.image.replace(/^data:[^,]*,/, "").replace(/\s/g, "");
     if (!BASE64.test(b64)) return c.json({ error: "image must be non-empty base64 (or a base64 data URL)" }, 400);
     const img: Uint8Array = Buffer.from(b64, "base64");
+    if (!sniffMime(img)) return c.json({ error: "image must be PNG, JPEG, WebP or GIF" }, 400);
     const userId = env.DEMO_USER_ID;
 
     const t0 = Date.now();
     const detection = await vision.detect(img);
-    const product = await resolveProduct(detection);
+    const tVision = Date.now() - t0;
+    const { product, identified } = await resolveProduct(detection);
     const offers = rankOffers(await findOffers(product));
     const { verdict, saved } = await getVerdict({ userId, product, offers, surface: req.source });
-    console.log(`snap: ${product._id} · ${offers.length} offers · ${verdict.kind}${saved ? "" : " (neutral)"} · ${Date.now() - t0}ms`);
+    console.log(`snap: ${product._id} · ${offers.length} offers · ${verdict.kind}${saved ? "" : " (neutral)"} · vision ${tVision}ms · total ${Date.now() - t0}ms`);
 
     if (env.MONGODB_URI) {
       const best = offers.find((o) => o._id === verdict.math.bestOfferId);
@@ -38,8 +40,10 @@ snap.post(
         agent: "vision",
         surface: req.source,
         type: "snap",
-        summary: `Identified ${product.title}${best ? ` — best ${best.condition} ${fmtUSD(best.priceCents)} at ${best.seller}` : ""}`,
-        refs: { productId: product._id, ...(saved && { verdictId: verdict._id }) },
+        summary: identified
+          ? `Identified ${product.title}${best ? ` — best ${best.condition} ${fmtUSD(best.priceCents)} at ${best.seller}` : ""}`
+          : `Couldn't identify the product in your snap (best guess: ${product.title})`,
+        refs: identified ? { productId: product._id, ...(saved && { verdictId: verdict._id }) } : {},
       }).catch((e) => console.warn("snap: emit failed:", e.message));
     }
 

@@ -7,6 +7,22 @@ import { OfferList, ProductHeader, VerdictCard, WatchButton } from "./components
 const AGENT_URL = import.meta.env.WXT_AGENT_URL ?? "http://localhost:8787";
 
 type PendingSnap = { dataUrl: string; pageUrl?: string; at: number };
+
+// Vision models gain nothing past ~1568px on the long edge; smaller uploads are faster and stay under API image limits.
+const MAX_EDGE = 1568;
+
+/** Downscale a captured frame to a JPEG and return its base64 (no data: prefix). */
+async function toUploadBase64(dataUrl: string): Promise<string> {
+  const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob());
+  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+  const canvas = new OffscreenCanvas(Math.round(bitmap.width * scale), Math.round(bitmap.height * scale));
+  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  const bytes = new Uint8Array(await (await canvas.convertToBlob({ type: "image/jpeg", quality: 0.85 })).arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
 type Status = { kind: "idle" } | { kind: "snapping"; preview: string } | { kind: "error"; message: string };
 
 export default function App() {
@@ -31,10 +47,12 @@ export default function App() {
       setResult(null);
       setStatus({ kind: "snapping", preview: snap.dataUrl });
       try {
+        const image = await toUploadBase64(snap.dataUrl);
+        if (id !== latest.current) return;
         const res = await fetch(`${AGENT_URL}/snap`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ image: snap.dataUrl.split(",")[1], source: "extension", pageUrl: snap.pageUrl }),
+          body: JSON.stringify({ image, source: "extension", pageUrl: snap.pageUrl }),
           signal: ac.signal,
         });
         const body = await res.json().catch(() => null);
