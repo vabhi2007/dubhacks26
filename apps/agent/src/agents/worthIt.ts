@@ -8,7 +8,7 @@ import { emit } from "../core/events";
 import { anthropic } from "./client";
 import { env } from "../env";
 import {
-  bestOffer, getOffers, getProduct, getUser, hasDb, monthToDateSpend, priceStats, recentPurchases, rememberVerdict, spendByCategory,
+  bestOffer, getOffers, getProduct, getUser, hasDb, MIN_DIPS, monthToDateSpend, priceStats, recentPurchases, rememberVerdict, spendByCategory,
   type CategorySpend, type PastPurchase,
 } from "./data";
 
@@ -66,7 +66,7 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
   // Fraction of the monthly category budget (1.19 = 119%), matching fixtures' 0.36.
   const budgetImpactPct = hasBudget && !zeroBudget ? round(price / monthlyBudget, 2) : undefined;
   const expectedDropCents =
-    history && history.dipsBelowRef > 0 ? Math.max(0, price - history.typicalLowCents) : 0;
+    history && history.dipsBelowRef >= MIN_DIPS ? Math.max(0, price - history.typicalLowCents) : 0;
   const paybackByCategory = Object.fromEntries(
     spend.filter((s) => s.totalCents > 0).map((s) => [s.category, round(price / (s.totalCents / 12), 1)]),
   );
