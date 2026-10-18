@@ -23,7 +23,7 @@ type Item = { href: string; label: string; icon: IconType; soon?: boolean };
 
 const NAV: Item[] = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/feed", label: "Feed", icon: Rss, soon: true },
+  { href: "/feed", label: "Feed", icon: Rss },
   { href: "/profile", label: "Spending", icon: PieChart, soon: true },
   { href: "/wishlist", label: "Wishlist", icon: Heart },
   { href: "/mandates", label: "Mandates", icon: CreditCard },

@@ -4,6 +4,7 @@
 // When the agent is reachable we show ONLY its data (with empty states); fixtures are a
 // fallback purely for when it's unreachable, never mixed into live data.
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import type { AgentEvent, Stats, Verdict } from "@alfred/shared";
 import { fmtUSD, watchTarget } from "@alfred/shared";
@@ -250,7 +251,12 @@ export default function Home() {
         </div>
 
         <section className="lg:col-span-1">
-          <SectionLabel>Agent feed</SectionLabel>
+          <div className="flex items-baseline justify-between">
+            <SectionLabel>Agent feed</SectionLabel>
+            <Link href="/feed" className="text-xs text-text-muted transition-colors hover:text-text">
+              All activity ›
+            </Link>
+          </div>
           <div className="rounded-card border border-border bg-surface px-5 py-1">
             {feed.length ? (
               <ul className="divide-y divide-border">
