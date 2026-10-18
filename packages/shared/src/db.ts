@@ -2,6 +2,9 @@
 import { MongoClient, type Collection, type Db, type Document } from "mongodb";
 import type * as S from "./schemas";
 
+// Re-exported so apps don't need their own `mongodb` dependency.
+export { MongoServerError, type ChangeStreamInsertDocument, type ClientSession, type Collection, type Document } from "mongodb";
+
 export const COLLECTIONS = {
   users: "users",
   transactions: "transactions",       // time series
@@ -26,22 +29,34 @@ export const COLLECTIONS = {
 } as const;
 
 let client: MongoClient | undefined;
-let db: Db | undefined;
+let dbPromise: Promise<Db> | undefined;
 
-export async function getDb(): Promise<Db> {
-  if (db) return db;
-  const uri = process.env.MONGODB_URI;
-  if (!uri) throw new Error("MONGODB_URI is not set");
-  client = new MongoClient(uri, { appName: "alfred" });
-  await client.connect();
-  db = client.db(process.env.MONGODB_DB ?? "alfred");
-  return db;
+// Memoized so concurrent first calls share one client.
+export function getDb(): Promise<Db> {
+  return (dbPromise ??= (async () => {
+    const uri = process.env.MONGODB_URI;
+    if (!uri) throw new Error("MONGODB_URI is not set");
+    // Driver default ignoreUndefined=false on purpose: a filter like { _id: undefined } then matches nothing (null) instead of
+    // being dropped to {} and matching an arbitrary doc. To omit undefined optional fields on insert, pass { ignoreUndefined: true }.
+    client = new MongoClient(uri, { appName: "alfred" });
+    await client.connect();
+    return client.db(process.env.MONGODB_DB ?? "alfred");
+  })().catch((e) => {
+    dbPromise = undefined;
+    throw e;
+  }));
+}
+
+// For sessions/transactions (e.g. purchase()).
+export async function getClient(): Promise<MongoClient> {
+  await getDb();
+  return client!;
 }
 
 export async function closeDb() {
   await client?.close();
   client = undefined;
-  db = undefined;
+  dbPromise = undefined;
 }
 
 // Ids are prefixed strings (e.g. "prd_x8k2"), not ObjectIds, so they round-trip through JSON/SSE/iMessage cleanly.
