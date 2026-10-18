@@ -6,7 +6,7 @@ import type { Approval } from "@alfred/shared";
 import { broadcast } from "./sse";
 import { pickCard, rewardFor } from "./cards";
 import { usd } from "./util";
-import { messenger } from "../messenger";
+import { sendApprovalRequest } from "../messenger";
 
 /**
  * Inserts only. Reopens after errors (with backoff), resuming from the latest token — kept fresh even on quiet streams via
@@ -61,6 +61,6 @@ export async function startChangeStreams() {
   const c = await collections();
   watchInserts("agent_events", c.agentEvents, {}, broadcast);
   watchInserts("approvals", c.approvals, { "fullDocument.status": "pending", "fullDocument.channel": { $ne: "web" } }, async (a) =>
-    messenger.send(a.userId, await approvalText(a)),
+    sendApprovalRequest(a.userId, a._id, await approvalText(a)),
   );
 }
