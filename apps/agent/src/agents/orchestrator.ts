@@ -16,6 +16,7 @@ import { usd } from "./format";
 import { createWatch, listWatches } from "./watcher";
 import { worthIt } from "./worthIt";
 import { timekeeper } from "./timekeeper";
+import { enroll, rewardsScan } from "./rewards";
 
 export type UserMessage = {
   userId: string;
@@ -233,6 +234,27 @@ function tools(ctx: Ctx) {
         return ws.length
           ? json(ws.map((w) => ({ product: w.product?.title ?? w.productId, target: usd(w.targetPriceCents), now: w.bestOffer ? usd(w.bestOffer.priceCents) : "unknown", status: w.status })))
           : "No watches yet.";
+      },
+    }),
+    betaZodTool({
+      name: "rewards_scan",
+      description: "Loyalty programs worth joining, ranked by estimated $/yr from the user's own spend at those merchants (and ones they're already in).",
+      inputSchema: z.object({}),
+      run: async () => {
+        const rs = await rewardsScan(userId, surface);
+        return rs.length
+          ? json(rs.slice(0, 6).map((r) => ({ programId: r.programId, name: r.name, perYear: usd(r.estAnnualValueCents), status: r.status, why: r.why })))
+          : "No programs look worthwhile from this spending.";
+      },
+    }),
+    betaZodTool({
+      name: "rewards_enroll",
+      description: "Join a rewards program the user explicitly asked to join (simulated one-tap enroll).",
+      inputSchema: z.object({ programId: z.string() }),
+      run: async ({ programId }) => {
+        const r = await enroll(userId, programId, surface);
+        ctx.turn.actions.push(`Joined ${r.name}${r.estAnnualValueCents ? ` (~${usd(r.estAnnualValueCents)}/yr)` : ""}.`);
+        return json({ status: r.status, name: r.name, perYear: usd(r.estAnnualValueCents) });
       },
     }),
     betaZodTool({

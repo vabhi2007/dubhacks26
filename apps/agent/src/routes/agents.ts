@@ -1,4 +1,4 @@
-// Owner: B. Agent routes (DESIGN.md §8.3). /rewards is a fixture until MVP-2.
+// Owner: B. Agent routes (DESIGN.md §8.3).
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { bodyLimit } from "hono/body-limit";
@@ -9,6 +9,7 @@ import { getVerdict, hasDb, listVerdicts } from "../agents/data";
 import { createWatch, listWatches, startWatcher } from "../agents/watcher";
 import { handleUserMessage, MAX_IMAGE_BYTES } from "../agents/orchestrator";
 import { timekeeper } from "../agents/timekeeper";
+import { enroll, rewardsScan } from "../agents/rewards";
 import { env } from "../env";
 
 export const agents = new Hono();
@@ -62,8 +63,9 @@ agents.post("/wishlist", async (c) => {
   if (!hasDb()) return c.json({ error: "watches need MONGODB_URI" }, 503);
   return c.json(await createWatch({ userId: env.DEMO_USER_ID, ...body }), 201);
 });
-agents.get("/rewards", (c) => c.json([]));
-agents.post("/rewards/:programId/enroll", (c) => c.json({ todo: "B: simulated enroll" }, 501));
+// Programs ranked by est. $/yr from the user's own merchant spend (+ Vector Search fit); enrolled ones included.
+agents.get("/rewards", async (c) => c.json(await rewardsScan(env.DEMO_USER_ID)));
+agents.post("/rewards/:programId/enroll", async (c) => c.json(await enroll(env.DEMO_USER_ID, c.req.param("programId"))));
 // Upgrade now vs wait, for the user's phone. ?productId= picks the upgrade target; ?refresh=1 skips the 6h reuse.
 agents.get("/timekeeper", async (c) =>
   c.json(await timekeeper({ userId: env.DEMO_USER_ID, productId: c.req.query("productId") || undefined, refresh: c.req.query("refresh") === "1" })),
