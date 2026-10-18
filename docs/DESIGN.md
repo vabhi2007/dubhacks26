@@ -236,7 +236,7 @@ authorize(mandateId, amountCents, merchantId, category):
 | `POST /snap` | C | `{image: base64, source:'extension'\|'imessage', pageUrl?}` → `{product, offers[], similar[], verdict}` |
 | `POST /chat` | B | `{text, surface, attachments?}` → SSE stream of `{delta}` then `{done, verdictId?}` |
 | `GET /events` | A | SSE stream of `AgentEvent` |
-| `GET /profile` | A | spend by category/month, recurring merchants, totals |
+| `GET /profile` | A | `{totals12moCents, txCount, window{from,to}, byCategory[{category, totalCents, txCount}], byMonth[{month:"YYYY-MM", totalCents, byCategory{cat:cents}, partial}], recurring[{merchant, merchantId, category, monthlyCents, cadence:"weekly"\|"biweekly"\|"monthly", lastChargedAt}], topMerchants[{merchant, merchantId, category, totalCents, txCount}]}` — trailing 365 days, positive amounts (same window as Worth-It); months in Seattle time, oldest first, zero-filled, first/last partial; recurring = ≥3 charges on a regular rhythm, still active |
 | `GET /products/:id` | A | `{product, offers[] (ranked: new US exact → other new → used/refurb, cheapest first), priceHistory[{ts, priceCents, seller}] (90d, new+exact sellers), latestVerdict \| null, watch \| null, breakEven \| null}` — `breakEven = {priceCents, monthlySavingsCents, months[{month, cumulativeSavingsCents}]}` from the verdict's `relatedSpend12moCents ÷ 12` (same basis as `paybackMonths`). `product.imageUrl` is set only for hand-picked items; otherwise show a monogram |
 | `GET /verdicts/:id` | B | `Verdict` |
 | `GET/POST /wishlist` | B | list / `{productId, targetPriceCents}` |
