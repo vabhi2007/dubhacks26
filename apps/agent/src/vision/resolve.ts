@@ -1,11 +1,12 @@
 // Owner: C. Detection → one Product (DESIGN.md §9 C: product resolution).
-//   1. Candidates: Atlas Search fuzzy text on products (index `products_text`, A's), else whole-word token regex.
+//   1. Candidates: Atlas Search fuzzy text on products (A's `products_text` index), else whole-word token regex.
 //   2. A printed model number with a clear lead decides on its own. Otherwise claude-opus-5-5 looks at the snap and
 //      picks the exact candidate, names a product the catalog lacks (unsaved), or says there's none.
 //   3. No answer → the best confident candidate, else an unsaved "unidentified" stub (#12), never the hero's verdict.
 import * as fx from "@alfred/shared/fixtures";
 import { Product } from "@alfred/shared";
 import { collections } from "@alfred/shared/db";
+import { SEARCH_INDEX } from "@alfred/shared/embed";
 import { env } from "../env";
 import { LOOKUP_MS, withTimeout } from "../deal/timeout";
 import type { Detection } from "./detection";
@@ -16,8 +17,6 @@ export type Resolution = { product: Product; identified: boolean; via: "model" |
 export const UNIDENTIFIED_ID = "prd_unidentified";
 /** Id prefix of products Claude named that aren't in the catalog (unsaved). */
 export const NEW_PRODUCT_PREFIX = "prd_new_";
-/** Atlas Search index on products (title/brand/model). Created by A's `pnpm indexes`; regex is used until it exists. */
-export const PRODUCT_SEARCH_INDEX = "products_text";
 
 const STOP = new Set(["the", "and", "with", "for", "new", "a", "an", "of", "unknown", "none"]);
 const MIN_SCORE = 3; // e.g. brand (2) + one title word (1)
@@ -116,7 +115,7 @@ async function candidates(tokens: string[], set: Set<string>): Promise<Scored[]>
     rows = await c.products
       .aggregate(
         [
-          { $search: { index: PRODUCT_SEARCH_INDEX, text: { query: tokens.join(" "), path: ["title", "brand", "model"], fuzzy: { maxEdits: 1 } } } },
+          { $search: { index: SEARCH_INDEX.productsText, text: { query: tokens.join(" "), path: ["title", "brand", "model"], fuzzy: { maxEdits: 1 } } } },
           { $limit: 25 },
           { $project: { embedding: 0 } },
         ],
