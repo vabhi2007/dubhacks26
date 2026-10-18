@@ -3,6 +3,8 @@
 //   2. else authorize() on the mandate — which must belong to this user and be issued to this agent — inside a
 //      transaction: mandate spend + order + `purchase` event commit together.
 //   3. mandate declines → `mandate_declined` event + approval.
+//   4. the merchant must accept Alfred's Visa Trusted Agent Protocol signature (agents/tap) before the order is written;
+//      a rejection throws inside the transaction, so the mandate spend rolls back too.
 // Approving re-enters charge() as the agent that asked: the human's YES satisfies (1); if that agent's mandate can't cover
 // it, the approval mints a single-use mandate for exactly that purchase, so money still only moves through authorize().
 import { collections, getClient, merchantIdFor, newId } from "@alfred/shared/db";
@@ -14,6 +16,7 @@ import { pickCard, rewardFor } from "./cards";
 import { emit } from "./events";
 import { authorize, whyDeclined } from "./mandates";
 import { isDuplicateKey, OMIT_UNDEFINED, usd } from "./util";
+import { tapCheckout } from "../agents/tap/checkout";
 
 const ONE_TIME_MANDATE_TTL_MS = 15 * 60_000;
 
@@ -37,7 +40,8 @@ export type PurchaseResult =
 /** Internal order fields beyond the frozen Order contract. */
 // `seller` is kept on the order because live offers (ofs_*) are replaced on each SerpAPI refresh — the Returns tracker
 // needs to know where it was bought long after the offer is gone.
-type OrderDoc = Order & { savedCents: number; approvalId?: string; idempotencyKey?: string; seller?: string };
+// `tap` records the agent key that signed the checkout and the merchant's order id (TAP=off leaves it unset).
+type OrderDoc = Order & { savedCents: number; approvalId?: string; idempotencyKey?: string; seller?: string; tap?: { keyid: string; merchantOrderId: string } };
 
 type Ctx = { user: User; offer: Offer; product: Product; merchantId: string; cards: Card[] };
 
@@ -170,6 +174,9 @@ async function charge(a: ChargeArgs): Promise<{ order: Order; mandate: Mandate }
         savedCents: Math.max(0, refPrice - a.amountCents), approvalId: a.approval?.id, idempotencyKey: a.idempotencyKey,
         seller: offer.seller,
       };
+      const tap = await tapCheckout({ merchantId, orderRef: order._id, amountCents: a.amountCents, card: { last4: card.last4, token: mandate.card.token } });
+      if (tap && !tap.ok) throw new HTTPException(402, { message: `${offer.seller} rejected Alfred's Visa Trusted Agent signature — ${tap.reason}` });
+      if (tap) order.tap = { keyid: tap.keyid, merchantOrderId: tap.merchantOrderId };
       await c.orders.insertOne(order, { session, ...OMIT_UNDEFINED });
       if (a.approval)
         await emit({
@@ -179,7 +186,7 @@ async function charge(a: ChargeArgs): Promise<{ order: Order; mandate: Mandate }
         }, { session });
       await emit({
         userId: user._id, agent: a.agent, surface: a.surface, type: "purchase",
-        summary: `Bought ${product.title} for ${usd(a.amountCents)} at ${offer.seller} on Visa ••${card.last4} (+${usd(order.rewardEarnedCents)} back)`,
+        summary: `Bought ${product.title} for ${usd(a.amountCents)} at ${offer.seller} on Visa ••${card.last4} (+${usd(order.rewardEarnedCents)} back)${tap ? " · Visa TAP verified" : ""}`,
         refs: { productId: product._id, mandateId: mandate._id, orderId: order._id, approvalId: a.approval?.id },
       }, { session });
       return { order, mandate };
