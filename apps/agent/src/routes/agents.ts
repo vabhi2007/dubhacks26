@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import * as fx from "@alfred/shared/fixtures";
 import { ChatRequest } from "@alfred/shared";
+import { getVerdict } from "../agents/data";
 
 export const agents = new Hono();
 
@@ -17,7 +18,10 @@ agents.post("/chat", async (c) => {
   });
 });
 
-agents.get("/verdicts/:id", (c) => c.json(c.req.param("id") === fx.timekeeperVerdict._id ? fx.timekeeperVerdict : fx.verdict));
+agents.get("/verdicts/:id", async (c) => {
+  const v = await getVerdict(c.req.param("id"));
+  return v ? c.json(v) : c.json({ error: "verdict not found" }, 404);
+});
 agents.get("/wishlist", (c) => c.json([]));
 agents.post("/wishlist", (c) => c.json({ todo: "B: create watch" }, 501));
 agents.get("/rewards", (c) => c.json([]));

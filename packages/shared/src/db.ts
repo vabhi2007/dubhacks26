@@ -49,6 +49,11 @@ export function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
 }
 
+// Stable merchant id from a display name ("Trader Joe's" → "mer_trader_joes"), so offers' `seller` maps to a merchant without a lookup.
+export function merchantIdFor(name: string) {
+  return `mer_${name.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`;
+}
+
 export async function collections() {
   const d = await getDb();
   const c = <T extends Document>(name: string): Collection<T> => d.collection<T>(name);
