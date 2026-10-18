@@ -1,10 +1,10 @@
 "use client";
 // FeedItem — one row in the Agent Feed. Shows which sub-agent acted, on which surface,
 // a one-line summary, and relative time. Built against the `events` fixture.
-import { useEffect, useState } from "react";
 import type { AgentEvent } from "@alfred/shared";
 import { cn } from "../cn";
 import { isoOrUndefined, relativeTime, shortDate } from "../time";
+import { useNow } from "../useNow";
 
 const AGENT_LABEL: Record<AgentEvent["agent"], string> = {
   orchestrator: "Alfred",
@@ -31,13 +31,8 @@ const ACCENT_TYPES = new Set<AgentEvent["type"]>(["price_drop", "purchase", "app
 
 export function FeedItem({ event, className }: { event: AgentEvent; className?: string }) {
   // Server and first client render both have now=null → deterministic UTC placeholder
-  // (no hydration mismatch). After mount we switch to relative time and tick every minute.
-  const [now, setNow] = useState<Date | null>(null);
-  useEffect(() => {
-    setNow(new Date());
-    const id = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(id);
-  }, []);
+  // (no hydration mismatch). After mount we switch to relative time on the shared minute clock.
+  const now = useNow();
 
   const label = now ? relativeTime(event.ts, now) : shortDate(event.ts);
   const iso = isoOrUndefined(event.ts);

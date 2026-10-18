@@ -1,6 +1,7 @@
 export * from "./cn";
 export * from "./motion";
 export * from "./time";
+export * from "./useNow";
 export * from "./components/VerdictBadge";
 export * from "./components/VerdictCard";
 export * from "./components/ApprovalCard";

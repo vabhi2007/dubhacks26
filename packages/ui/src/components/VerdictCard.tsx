@@ -15,16 +15,22 @@ function Chip({ label }: { label: string }) {
 }
 
 // Months from Claude can be noisy (e.g. 3.3333); show at most one decimal, no trailing ".0".
-const fmtMonths = (m: number) => (Math.round(m * 10) / 10).toString();
+// Returns null for values that would read as nonsense (≤0 after rounding, NaN, Infinity) so the chip is skipped.
+const fmtMonths = (m: number) => {
+  const r = Math.round(m * 10) / 10;
+  return Number.isFinite(r) && r > 0 ? r.toString() : null;
+};
 
 function mathChips(v: Verdict): string[] {
   const m = v.math;
   const chips: string[] = [`Price ${fmtUSD(m.priceCents)}`];
-  if (m.paybackMonths != null) chips.push(`Pays back in ${fmtMonths(m.paybackMonths)}mo`);
+  const payback = m.paybackMonths != null ? fmtMonths(m.paybackMonths) : null;
+  if (payback) chips.push(`Pays back in ${payback}mo`);
   if (m.relatedSpend12moCents != null) chips.push(`${fmtUSD(m.relatedSpend12moCents, { compact: true })}/yr related`);
   if (m.budgetImpactPct != null) chips.push(`${Math.round(m.budgetImpactPct * 100)}% of budget`);
   if (m.expectedDropCents != null) chips.push(`~${fmtUSD(m.expectedDropCents)} likely drop`);
-  if (v.timekeeper) chips.push(`Wait ${fmtMonths(v.timekeeper.waitMonths)}mo`);
+  const wait = v.timekeeper ? fmtMonths(v.timekeeper.waitMonths) : null;
+  if (wait) chips.push(`Wait ${wait}mo`);
   return chips;
 }
 
@@ -52,8 +58,8 @@ export function VerdictCard({
       </div>
 
       <ul className="mt-4 space-y-1.5">
-        {verdict.reasons.map((r) => (
-          <li key={r} className="flex gap-2 text-sm text-text-muted">
+        {verdict.reasons.map((r, i) => (
+          <li key={`${i}-${r}`}className="flex gap-2 text-sm text-text-muted">
             <span aria-hidden className="mt-2 h-1 w-1 shrink-0 rounded-full bg-text-muted/60" />
             <span>{r}</span>
           </li>
@@ -61,8 +67,8 @@ export function VerdictCard({
       </ul>
 
       <div className="mt-4 flex flex-wrap gap-1.5">
-        {mathChips(verdict).map((c) => (
-          <Chip key={c} label={c} />
+        {mathChips(verdict).map((c, i) => (
+          <Chip key={`${i}-${c}`} label={c} />
         ))}
       </div>
 
