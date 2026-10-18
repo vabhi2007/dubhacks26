@@ -266,6 +266,14 @@ export function rememberVerdict(v: Verdict) {
   if (recentVerdicts.size > 500) recentVerdicts.delete(recentVerdicts.keys().next().value!);
 }
 
+/** A user's verdicts, newest first. Mongo when it answers (even if empty); otherwise this process's verdicts, else the fixture. */
+export async function listVerdicts(userId: string, limit: number): Promise<Verdict[]> {
+  const rows = await tryDb((c) => c.verdicts.find({ userId }).sort({ createdAt: -1 }).limit(limit).toArray());
+  if (rows) return rows;
+  const mine = [...recentVerdicts.values()].filter((v) => v.userId === userId).reverse();
+  return (mine.length ? mine : [fx.verdict]).slice(0, limit);
+}
+
 export async function getVerdict(id: string): Promise<Verdict | undefined> {
   return (
     recentVerdicts.get(id) ??
