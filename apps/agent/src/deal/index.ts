@@ -3,7 +3,8 @@ import * as fx from "@alfred/shared/fixtures";
 import { Offer, type PriceSource, type Product, type RawOffer } from "@alfred/shared";
 import { collections } from "@alfred/shared/db";
 import { env } from "../env";
-import { withTimeout } from "./timeout";
+import { LOOKUP_MS, withTimeout } from "./timeout";
+import { UNIDENTIFIED_ID } from "../vision/resolve";
 
 export const mockPriceSource: PriceSource = {
   async search() {
@@ -19,9 +20,10 @@ const mockOffers = (product: Product): Offer[] => (product._id === fx.product._i
 
 /** Offers for a resolved product. cache/live read Mongo `offers` (invalid rows dropped); empty or unreachable → mock. */
 export async function findOffers(product: Product): Promise<Offer[]> {
+  if (product._id === UNIDENTIFIED_ID) return [];
   if (env.PRICE_SOURCE !== "mock" && env.MONGODB_URI) {
     try {
-      const rows = await withTimeout(collections().then((c) => c.offers.find({ productId: product._id }).toArray()), undefined, "offer lookup");
+      const rows = await withTimeout(collections().then((c) => c.offers.find({ productId: product._id }, { timeoutMS: LOOKUP_MS }).toArray()), undefined, "offer lookup");
       const cached = rows.flatMap((r) => {
         const o = Offer.safeParse(r);
         if (!o.success) console.warn(`findOffers: dropping invalid offer ${String(r._id)}`);
