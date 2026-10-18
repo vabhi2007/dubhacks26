@@ -7,7 +7,7 @@
 ### 1 — Title
 **Alfred**
 *Your agent spends like it's your money — because it is.*
-DubHacks '26 · Visa track (+ Perceptron, Photon, T-Mobile, Cloudforce, VEYZL)
+DubHacks '26 · Visa track (+ Perceptron, Photon, T-Mobile, VEYZL)
 Small team credit line.
 
 ### 2 — The problem
