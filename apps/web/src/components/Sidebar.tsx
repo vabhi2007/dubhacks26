@@ -28,7 +28,7 @@ const NAV: Item[] = [
   { href: "/wishlist", label: "Wishlist", icon: Heart },
   { href: "/mandates", label: "Mandates", icon: CreditCard },
   { href: "/rewards", label: "Rewards", icon: Gift, soon: true },
-  { href: "/timekeeper", label: "Timekeeper", icon: Clock, soon: true },
+  { href: "/timekeeper", label: "Timekeeper", icon: Clock },
   { href: "/chat", label: "Chat", icon: MessageSquare, soon: true },
 ];
 
