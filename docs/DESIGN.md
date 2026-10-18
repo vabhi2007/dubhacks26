@@ -238,6 +238,7 @@ authorize(mandateId, amountCents, merchantId, category):
 | `POST /chat` | B | `{text, surface, attachments?}` → SSE stream of `{delta}` then `{done, verdictId?}` |
 | `GET /events` | A | SSE stream of `AgentEvent` |
 | `GET /profile` | A | spend by category/month, recurring merchants, totals |
+| `GET /products/:id` | A | `{product, offers[] (ranked: new US exact → other new → used/refurb, cheapest first), priceHistory[{ts, priceCents, seller}] (90d, new+exact sellers), latestVerdict \| null, watch \| null, breakEven \| null}` — `breakEven = {priceCents, monthlySavingsCents, months[{month, cumulativeSavingsCents}]}` from the verdict's `relatedSpend12moCents ÷ 12` (same basis as `paybackMonths`). `product.imageUrl` is set only for hand-picked items; otherwise show a monogram |
 | `GET /verdicts/:id` | B | `Verdict` |
 | `GET/POST /wishlist` | B | list / `{productId, targetPriceCents}` |
 | `GET/POST /mandates`, `POST /mandates/:id/revoke` | A | |
