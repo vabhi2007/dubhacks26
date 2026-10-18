@@ -10,6 +10,7 @@ import { NEW_PRODUCT_PREFIX, UNIDENTIFIED_ID } from "../vision/resolve";
 import { serpApiSource } from "./serpapi";
 import { labelOffers } from "./label";
 import { dropImplausible } from "./sanity";
+import { embedProduct } from "./similar";
 
 export const mockPriceSource: PriceSource = {
   async search() {
@@ -117,6 +118,7 @@ async function liveOffers(input: Product): Promise<{ product: Product; offers: O
     );
     if (doc) product = doc;
     console.log(`findOffers: saved new product ${product._id} "${product.title}"`);
+    if (!saved) void embedProduct(product); // in the background: only similar-item search needs it
   }
 
   const now = new Date();
@@ -152,3 +154,4 @@ export function rankOffers(offers: Offer[]): Offer[] {
 }
 
 export { getVerdict } from "./verdict";
+export { findSimilar } from "./similar";
