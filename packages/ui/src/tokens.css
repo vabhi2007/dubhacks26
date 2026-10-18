@@ -1,0 +1,57 @@
+/* Alfred design tokens — DESIGN.md §6. Owner: D. Import once per app, after `@import "tailwindcss";` */
+
+:root {
+  --bg: #FAFAF8;
+  --surface: #FFFFFF;
+  --surface-2: #F3F2EE;
+  --border: #E6E4DE;
+  --text: #141414;
+  --text-muted: #6B6A66;
+  --accent: #C98E12;
+  --accent-hover: #B07C0E;
+  --accent-subtle: rgba(201, 142, 18, 0.10);
+  --on-accent: #141414;
+  --buy: #2F8F5B;
+  --wait: #C98E12;
+  --skip: #C9482F;
+}
+
+.dark {
+  --bg: #0B0B0C;
+  --surface: #141416;
+  --surface-2: #1C1C1F;
+  --border: #26262A;
+  --text: #EDEDEC;
+  --text-muted: #8E8E93;
+  --accent: #E2A829;
+  --accent-hover: #EDB842;
+  --accent-subtle: rgba(226, 168, 41, 0.12);
+  --on-accent: #141414;
+  --buy: #4CAF7A;
+  --wait: #E2A829;
+  --skip: #E5654B;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-on-accent: var(--on-accent);
+  --color-buy: var(--buy);
+  --color-wait: var(--wait);
+  --color-skip: var(--skip);
+
+  --radius-card: 10px;
+  --radius-control: 8px;
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Money and numbers always use tabular mono figures */
+.num { font-family: var(--font-geist-mono, ui-monospace, monospace); font-variant-numeric: tabular-nums; }

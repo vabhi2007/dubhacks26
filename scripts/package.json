@@ -1,0 +1,24 @@
+{
+  "name": "@alfred/scripts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check-env": "tsx check-env.ts",
+    "setup-db": "tsx setup-db.ts",
+    "seed": "tsx seed.ts",
+    "indexes": "tsx indexes.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@alfred/shared": "workspace:*",
+    "@anthropic-ai/sdk": "^0.135.0",
+    "dotenv": "^18.0.8",
+    "mongodb": "^7.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

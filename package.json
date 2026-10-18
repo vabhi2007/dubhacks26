@@ -1,0 +1,21 @@
+{
+  "name": "alfred",
+  "private": true,
+  "packageManager": "pnpm@12.14.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "seed": "pnpm --filter @alfred/scripts seed",
+    "indexes": "pnpm --filter @alfred/scripts indexes",
+    "check:env": "pnpm --filter @alfred/scripts check-env"
+  },
+  "devDependencies": {
+    "turbo": "^2.11.9",
+    "typescript": "^7.0.2"
+  }
+}

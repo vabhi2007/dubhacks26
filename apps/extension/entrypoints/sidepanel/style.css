@@ -1,0 +1,7 @@
+@import "tailwindcss";
+@import "@alfred/ui/tokens.css";
+@source "../../../../packages/ui/src";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+body { background: var(--bg); color: var(--text); font-family: "Geist", ui-sans-serif, system-ui, sans-serif; }
