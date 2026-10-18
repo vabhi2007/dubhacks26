@@ -4,7 +4,7 @@ import { bodyLimit } from "hono/body-limit";
 import { fmtUSD, SnapRequest, SnapResponse } from "@alfred/shared";
 import { env } from "../env";
 import { emit } from "../core/events";
-import { resolveProduct, sniffMime, vision } from "../vision";
+import { NEW_PRODUCT_PREFIX, resolveProduct, sniffMime, vision } from "../vision";
 import { findOffers, getVerdict, rankOffers } from "../deal";
 
 export const snap = new Hono();
@@ -28,10 +28,12 @@ snap.post(
     const t0 = Date.now();
     const detection = await vision.detect(img);
     const tVision = Date.now() - t0;
-    const { product, identified } = await resolveProduct(detection);
+    const { product, identified, via } = await resolveProduct(detection, img);
+    const tResolve = Date.now() - t0 - tVision;
+    const inCatalog = identified && !product._id.startsWith(NEW_PRODUCT_PREFIX);
     const offers = rankOffers(await findOffers(product));
     const { verdict, saved } = await getVerdict({ userId, product, offers, surface: req.source });
-    console.log(`snap: ${product._id} · ${offers.length} offers · ${verdict.kind}${saved ? "" : " (neutral)"} · vision ${tVision}ms · total ${Date.now() - t0}ms`);
+    console.log(`snap: ${product._id} · ${offers.length} offers · ${verdict.kind}${saved ? "" : " (neutral)"} · vision ${tVision}ms · resolve ${tResolve}ms (${via}) · total ${Date.now() - t0}ms`);
 
     if (env.MONGODB_URI) {
       const best = offers.find((o) => o._id === verdict.math.bestOfferId);
@@ -40,10 +42,12 @@ snap.post(
         agent: "vision",
         surface: req.source,
         type: "snap",
-        summary: identified
-          ? `Identified ${product.title}${best ? ` — best ${best.condition} ${fmtUSD(best.priceCents)} at ${best.seller}` : ""}`
-          : `Couldn't identify the product in your snap (best guess: ${product.title})`,
-        refs: identified ? { productId: product._id, ...(saved && { verdictId: verdict._id }) } : {},
+        summary: !identified
+          ? `Couldn't identify the product in your snap (best guess: ${product.title})`
+          : !inCatalog
+            ? `Identified ${product.title} — not in the catalog yet, no prices`
+            : `Identified ${product.title}${best ? ` — best ${best.condition} ${fmtUSD(best.priceCents)} at ${best.seller}` : ""}`,
+        refs: inCatalog ? { productId: product._id, ...(saved && { verdictId: verdict._id }) } : {},
       }).catch((e) => console.warn("snap: emit failed:", e.message));
     }
 
