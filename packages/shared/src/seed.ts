@@ -9,6 +9,7 @@ import type { Db } from "mongodb";
 import { COLLECTIONS, collections, getDb, merchantIdFor } from "./db";
 import type * as S from "./schemas";
 import { CATALOG } from "./seed-catalog";
+import { PRODUCT_IMAGES } from "./seed-images";
 import { CARD_OFFERS, MERCHANTS, PERSONAS, PLANS, REWARDS_PROGRAMS, TRADE_IN, TRADE_IN_MONTHS, type MerchantName, type Persona } from "./seed-world";
 
 export const DEMO_USER_ID = "u_maya";
@@ -208,7 +209,8 @@ function catalogDocs(today: number, specs: ProductSpec[]) {
   for (const { offers: os, ...p } of specs) {
     if (keys.has(p._id) || keys.has(p.canonicalKey)) throw new Error(`seed: duplicate product ${p._id} / ${p.canonicalKey}`);
     keys.add(p._id).add(p.canonicalKey);
-    products.push({ ...p, source: "mock", imageUrl: `https://placehold.co/400x400/141416/E2A829?text=${encodeURIComponent(p.model)}` });
+    // Real images only where hand-picked (seed-images.ts); the rest have none and the UI shows a monogram.
+    products.push({ ...p, source: "mock", ...(PRODUCT_IMAGES[p._id] && { imageUrl: PRODUCT_IMAGES[p._id] }) });
     for (const o of os) {
       offers.push({
         _id: `ofr_${++n}`, productId: p._id, seller: o.seller, priceCents: o.price(0), condition: o.condition, region: o.seller === "Amazon UK" ? "UK" : "US",
@@ -219,6 +221,7 @@ function catalogDocs(today: number, specs: ProductSpec[]) {
         priceHistory.push({ ts: new Date(today - d * DAY), meta: { productId: p._id, seller: o.seller }, priceCents: o.price(d) });
     }
   }
+  for (const id of Object.keys(PRODUCT_IMAGES)) if (!keys.has(id)) throw new Error(`seed: PRODUCT_IMAGES has unknown product ${id}`);
   return { products, offers, priceHistory };
 }
 

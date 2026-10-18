@@ -12,6 +12,7 @@ import { emit, recentEvents } from "../core/events";
 import { listMandates, revokeMandate } from "../core/mandates";
 import { resolveApproval } from "../core/purchase";
 import { subscribe } from "../core/sse";
+import { breakEvenFrom, getProductDetail, rankOffers } from "../core/products";
 import { getStats } from "../core/stats";
 import { lastApprovalAsked, messenger } from "../messenger";
 import { routeInbound } from "../messenger/inbound";
@@ -63,6 +64,14 @@ core.get("/events", (c) =>
 
 core.get("/profile", (c) => c.json({ todo: "A: spend by category/month, recurring merchants, totals" }));
 core.get("/stats", async (c) => c.json(live ? await getStats(userId) : fx.stats));
+
+// Product page: { product, offers (ranked), priceHistory (90d, new/exact sellers), latestVerdict, watch, breakEven }.
+core.get("/products/:id", async (c) => {
+  const id = c.req.param("id");
+  if (live) return c.json(await getProductDetail(id, userId));
+  if (id !== fx.product._id) throw new HTTPException(404, { message: `product ${id} not found` });
+  return c.json({ product: fx.product, offers: rankOffers(fx.offers), priceHistory: [], latestVerdict: fx.verdict, watch: null, breakEven: breakEvenFrom(fx.verdict) });
+});
 
 core.get("/mandates", async (c) => c.json(live ? await listMandates(userId) : fx.mandates));
 core.post("/mandates", (c) => c.json({ todo: "A: create mandate" }, 501));
