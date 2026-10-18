@@ -13,8 +13,10 @@ import { timekeeper } from "../agents/timekeeper";
 import { enroll, rewardsScan } from "../agents/rewards";
 import { listReturns } from "../agents/returns";
 import { env } from "../env";
+import { tap } from "../agents/tap/merchant";
 
 export const agents = new Hono();
+agents.route("/", tap); // Visa Trusted Agent Protocol: key directory, mock merchant, self-test
 
 if (hasDb()) startWatcher();
 
