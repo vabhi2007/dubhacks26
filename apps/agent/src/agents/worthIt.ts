@@ -7,6 +7,7 @@ import { newId } from "@alfred/shared/db";
 import { anthropic } from "./client";
 import { usd } from "./format";
 import { publishVerdict } from "./verdicts";
+import { smartPay } from "./smartPay";
 import { env } from "../env";
 import {
   bestOffer, getOffers, getProduct, getUser, MIN_DIPS, monthToDateSpend, priceStats, recentPurchases, spendByCategory,
@@ -54,11 +55,12 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
   const user = await getUser(userId);
   const monthlyBudget = user.settings.monthlyBudgets[product.category];
   const hasBudget = monthlyBudget != null;
-  const [spend, mtd, history, owned] = await Promise.all([
+  const [spend, mtd, history, owned, pay] = await Promise.all([
     spendByCategory(userId, now),
     hasBudget ? monthToDateSpend(userId, product.category, now) : 0,
     sellerPriceStats(productId, best, offers, now),
     recentPurchases(userId, product.category, now),
+    smartPay({ userId, seller: best.seller, category: product.category, amountCents: best.priceCents }).catch(() => undefined),
   ]);
 
   const price = best.priceCents;
@@ -100,6 +102,7 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
       topMerchants: s.topMerchants.map((m) => `${m.name} ${fmtUSD(m.totalCents)}`),
       paybackMonthsIfReplaced: paybackByCategory[s.category],
     })),
+    ...(pay && { bestCardToPayWith: { card: `${pay.name} ••${pay.last4}`, back: fmtUSD(pay.rewardCents), ratePct: pay.ratePct, cardLinkedOffer: Boolean(pay.offerId) } }),
     alreadyBoughtInCategory12mo: owned.map((o) => ({ title: o.title, price: fmtUSD(o.amountCents), sameProduct: o.productId === productId })),
   };
 
@@ -125,6 +128,7 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
       ...(budgetImpactPct !== undefined && { budgetImpactPct }),
       expectedDropCents,
     },
+    ...(pay && { smartPay: { cardId: pay.cardId, ...(pay.offerId && { offerId: pay.offerId }), rewardCents: pay.rewardCents } }),
     createdAt: now,
   };
 

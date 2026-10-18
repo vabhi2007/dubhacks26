@@ -11,12 +11,13 @@ import { findOffers, rankOffers } from "../deal";
 import { resolveProduct, sniffMime, vision } from "../vision";
 import { env } from "../env";
 import { anthropic } from "./client";
-import { getOffers, getProduct, hasDb, searchProducts, spendByCategory } from "./data";
+import { getOffer, getOffers, getProduct, hasDb, searchProducts, spendByCategory } from "./data";
 import { usd } from "./format";
 import { createWatch, listWatches } from "./watcher";
 import { worthIt } from "./worthIt";
 import { timekeeper } from "./timekeeper";
 import { enroll, rewardsScan } from "./rewards";
+import { smartPay } from "./smartPay";
 
 export type UserMessage = {
   userId: string;
@@ -258,6 +259,22 @@ function tools(ctx: Ctx) {
       },
     }),
     betaZodTool({
+      name: "smart_pay",
+      description: "Which of the user's cards earns the most on a specific offer (card rewards + card-linked offers), and how much back.",
+      inputSchema: z.object({ offerId: z.string() }),
+      run: async ({ offerId }) => {
+        const offer = await getOffer(offerId);
+        const product = offer && (await getProduct(offer.productId));
+        if (!offer || !product) return `Unknown offerId ${offerId}.`;
+        const pay = await smartPay({ userId, seller: offer.seller, category: product.category, amountCents: offer.priceCents });
+        if (!pay) return "No cards on file.";
+        return json({
+          best: { card: `${pay.name} ••${pay.last4}`, back: fmtUSD(pay.rewardCents), ratePct: pay.ratePct, cardLinkedOffer: Boolean(pay.offerId) },
+          others: pay.alternatives.map((a) => ({ card: `${a.name} ••${a.last4}`, back: fmtUSD(a.rewardCents) })),
+        });
+      },
+    }),
+    betaZodTool({
       name: "spending_profile",
       description: "The user's last-12-months spending by category with top merchants.",
       inputSchema: z.object({}),
@@ -282,7 +299,8 @@ function tools(ctx: Ctx) {
           ctx.turn.actions.push(`Sent you an approval for ${title} at ${offer.seller} (${fmtUSD(a.amountCents)}, code ${a.shortCode}).`);
           return json({ status: "needs_approval", amount: fmtUSD(a.amountCents), shortCode: a.shortCode, note: "Asked the user to approve (reply YES/NO or tap Approve)." });
         }
-        const r = await purchase({ userId, offerId, mandateId: mandate._id, agent: "orchestrator", surface, idempotencyKey });
+        const pay = product ? await smartPay({ userId, seller: offer.seller, category: product.category, amountCents: offer.priceCents }).catch(() => undefined) : undefined;
+        const r = await purchase({ userId, offerId, mandateId: mandate._id, agent: "orchestrator", surface, idempotencyKey, ...(pay && { cardId: pay.cardId }) });
         if (r.status === "purchased") {
           ctx.turn.actions.push(`Bought ${title} for ${usd(r.order.amountCents)} at ${offer.seller} on Visa ••${r.mandate.card.last4}.`);
           return json({ status: "purchased", amount: usd(r.order.amountCents), rewardEarned: usd(r.order.rewardEarnedCents), card: `••${r.mandate.card.last4}` });
