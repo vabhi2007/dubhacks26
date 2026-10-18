@@ -42,7 +42,7 @@ await check("SerpAPI", true, ["SERPAPI_KEY"], async () => {
 });
 
 await check("Voyage AI", true, ["VOYAGE_API_KEY"], async () => {
-  const r = await fetch("https://api.voyageai.com/v1/embeddings", {
+  const r = await fetch(`${process.env.VOYAGE_BASE_URL || "https://api.voyageai.com/v1"}/embeddings`, {
     method: "POST",
     headers: { authorization: `Bearer ${process.env.VOYAGE_API_KEY}`, "content-type": "application/json" },
     body: JSON.stringify({ input: ["ping"], model: "voyage-3.5-lite" }),
@@ -59,7 +59,13 @@ await check("Perceptron", true, ["PERCEPTRON_API_KEY"], async () => {
   if (!r.ok) throw new Error(d.error?.message ?? `HTTP ${r.status}`);
   return `ok (${d.data?.map((m) => m.id).join(", ")})`;
 });
-await check("Photon", true, ["PHOTON_API_KEY", "PHOTON_PROJECT_ID"]); // TODO(A): live test via spectrum-ts
+await check("Photon", true, ["PHOTON_PROJECT_ID", "PHOTON_PROJECT_SECRET"], async () => {
+  const { Spectrum } = await import("spectrum-ts");
+  const { imessage } = await import("spectrum-ts/providers");
+  const app = await Spectrum({ projectId: process.env.PHOTON_PROJECT_ID!, projectSecret: process.env.PHOTON_PROJECT_SECRET!, providers: [imessage.config()] });
+  await app.stop();
+  return "spectrum-ts init ok (send/receive untested)";
+});
 await check("cloudflared tunnel", false, ["PUBLIC_TUNNEL_URL"]);
 await check("Atlas Charts embed", false, ["ATLAS_CHARTS_BASE_URL", "ATLAS_CHARTS_SPEND_CHART_ID"]);
 await check("Voice (Retell or ElevenLabs)", false, ["RETELL_API_KEY"]);

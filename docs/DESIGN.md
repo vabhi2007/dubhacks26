@@ -79,7 +79,7 @@ Cross-surface rule: the **Verdict Card** and **Approval Card** look identical wh
 ### Env (`.env`, never committed; `.env.example` checked in)
 ```
 MONGODB_URI=  ANTHROPIC_API_KEY=  SERPAPI_KEY=  VOYAGE_API_KEY=
-PERCEPTRON_API_KEY=  PHOTON_API_KEY=  PHOTON_PROJECT_ID=
+PERCEPTRON_API_KEY=  PHOTON_PROJECT_SECRET=  PHOTON_PROJECT_ID=
 PRICE_SOURCE=mock  VISION_SOURCE=perceptron  MESSENGER=photon   # or: claude / console
 AGENT_URL=http://localhost:8787  PUBLIC_TUNNEL_URL=  DEMO_USER_ID=u_maya
 ```

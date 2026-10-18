@@ -14,7 +14,8 @@
     "@alfred/shared": "workspace:*",
     "@anthropic-ai/sdk": "^0.135.0",
     "dotenv": "^18.0.8",
-    "mongodb": "^7.7.0"
+    "mongodb": "^7.7.0",
+    "spectrum-ts": "^12.11.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
