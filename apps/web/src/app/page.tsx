@@ -1,24 +1,27 @@
 "use client";
 // Home — MVP-0 core loop surface (DESIGN.md §10). Stats, latest verdict, pending
 // approvals (Approve/Deny → POST /approvals/:id), and the live Agent Feed.
+// When the agent is reachable we show ONLY its data (with empty states); fixtures are a
+// fallback purely for when it's unreachable, never mixed into live data.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { AgentEvent, Stats, Verdict } from "@alfred/shared";
 import { fmtUSD } from "@alfred/shared";
-import { product as fxProduct } from "@alfred/shared/fixtures";
+import { events as fxEvents, product as fxProduct, verdict as fxVerdict } from "@alfred/shared/fixtures";
 import { ApprovalCard, type ApprovalState, FeedItem, MoneyStat, VerdictCard } from "@alfred/ui";
 import {
   type ApiError,
   type ApprovalView,
-  getLatestVerdict,
   getPendingApprovals,
   getStats,
+  getVerdict,
   resolveApproval,
 } from "../lib/api";
 import { useAgentEvent, useEvents } from "../lib/useEvents";
 
 // Events that change the stats/approvals the demo watches — including the reset's "message".
 const RELOAD_ON = new Set<AgentEvent["type"]>(["approval_requested", "approval_resolved", "purchase", "message"]);
+const fixtureFeed = [...fxEvents].reverse();
 
 const verdictProductTitle = (id?: string) => (id === fxProduct._id ? fxProduct.title : undefined);
 
@@ -35,13 +38,19 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-muted">{children}</h2>;
 }
 
+function EmptyCard({ children }: { children: React.ReactNode }) {
+  return <div className="rounded-card border border-border bg-surface p-6 text-sm text-text-muted">{children}</div>;
+}
+
 export default function Home() {
   const [stats, setStats] = useState<Stats | null>(null);
-  const [verdict, setVerdict] = useState<Verdict | null>(null);
+  const [liveVerdict, setLiveVerdict] = useState<Verdict | null>(null);
   const [approvals, setApprovals] = useState<ApprovalView[]>([]);
   const [states, setStates] = useState<Record<string, ApprovalState>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
-  const { events } = useEvents();
+  const { events, status } = useEvents();
+
+  const offline = status === "offline";
 
   const statesRef = useRef(states);
   statesRef.current = states;
@@ -63,15 +72,19 @@ export default function Home() {
   useEffect(() => {
     reloadStats();
     reloadApprovals();
-    getLatestVerdict().then((r) => setVerdict(r.data));
   }, [reloadStats, reloadApprovals]);
 
   // Scripted demo: /admin price drop → approval_requested → the approval appears here without a
-  // manual refresh; approve → approval_resolved/purchase → stats + feed update live.
+  // manual refresh; approve → approval_resolved/purchase → stats + feed update live. The latest
+  // verdict comes from the newest verdict event (no list route yet — see getVerdict TODO).
   useAgentEvent((e) => {
-    if (!RELOAD_ON.has(e.type)) return;
-    reloadStats();
-    reloadApprovals();
+    if (RELOAD_ON.has(e.type)) {
+      reloadStats();
+      reloadApprovals();
+    }
+    if (e.type === "verdict" && e.refs.verdictId) {
+      getVerdict(e.refs.verdictId).then((v) => v && setLiveVerdict(v));
+    }
   });
 
   async function decide(a: ApprovalView, decision: "approve" | "deny") {
@@ -83,8 +96,8 @@ export default function Home() {
       toast.success(decision === "approve" ? `Approved ${fmtUSD(a.amountCents)}` : "Declined");
       reloadStats();
     } catch (err) {
-      const { status, body } = err as ApiError;
-      if (status == null) {
+      const { status: code, body } = err as ApiError;
+      if (code == null) {
         // No response at all → agent offline. Keep the optimistic outcome so the demo still reads.
         toast.message("Agent offline — showing mock outcome", { description: `${decision} ${a.shortCode}` });
       } else {
@@ -94,13 +107,17 @@ export default function Home() {
           delete n[a._id];
           return n;
         });
-        toast.error(`Couldn't ${decision} ${a.shortCode} — ${body || `error ${status}`}`);
+        toast.error(`Couldn't ${decision} ${a.shortCode} — ${body || `error ${code}`}`);
         reloadApprovals();
       }
     } finally {
       setBusyId(null);
     }
   }
+
+  // Fixtures only when the agent is unreachable; otherwise live data (possibly empty).
+  const feed = offline ? fixtureFeed : events;
+  const verdict = offline ? fxVerdict : liveVerdict;
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-8">
@@ -132,7 +149,9 @@ export default function Home() {
                   </button>
                 }
               />
-            ) : null}
+            ) : (
+              <EmptyCard>No verdict yet — snap a product or ask Alfred whether something&rsquo;s worth it.</EmptyCard>
+            )}
           </section>
 
           <section>
@@ -155,9 +174,7 @@ export default function Home() {
                 ))}
               </div>
             ) : (
-              <div className="rounded-card border border-border bg-surface p-6 text-sm text-text-muted">
-                No approvals waiting on you.
-              </div>
+              <EmptyCard>No approvals waiting on you.</EmptyCard>
             )}
           </section>
         </div>
@@ -165,11 +182,15 @@ export default function Home() {
         <section className="lg:col-span-1">
           <SectionLabel>Agent feed</SectionLabel>
           <div className="rounded-card border border-border bg-surface px-5 py-1">
-            <ul className="divide-y divide-border">
-              {events.map((e) => (
-                <FeedItem key={e._id} event={e} />
-              ))}
-            </ul>
+            {feed.length ? (
+              <ul className="divide-y divide-border">
+                {feed.map((e) => (
+                  <FeedItem key={e._id} event={e} />
+                ))}
+              </ul>
+            ) : (
+              <p className="py-4 text-sm text-text-muted">No activity yet. Alfred&rsquo;s actions will show up here.</p>
+            )}
           </div>
         </section>
       </div>

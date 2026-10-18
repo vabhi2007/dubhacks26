@@ -11,7 +11,8 @@ const REFETCH_ON = new Set<AgentEvent["type"]>(["purchase", "approval_resolved"]
 
 export function SavingsCounter() {
   const [stats, setStats] = useState<Stats | null>(null);
-  const { live } = useEvents();
+  const { status } = useEvents();
+  const live = status === "live";
 
   useEffect(() => {
     let active = true;
