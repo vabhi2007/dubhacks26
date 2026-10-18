@@ -6,7 +6,7 @@ import { env } from "../env";
 import { emit } from "../core/events";
 import { NEW_PRODUCT_PREFIX, resolveProduct, sniffMime, vision } from "../vision";
 import { heicToJpeg, isHeic } from "../vision/heic";
-import { getVerdict, priceProduct, rankOffers } from "../deal";
+import { findSimilar, getVerdict, priceProduct, rankOffers } from "../deal";
 
 export const snap = new Hono();
 
@@ -44,8 +44,9 @@ snap.post(
     const product = priced.product; // a product Claude named may have just been saved with live prices
     const offers = rankOffers(priced.offers);
     const inCatalog = identified && !product._id.startsWith(NEW_PRODUCT_PREFIX);
-    const { verdict, saved } = await getVerdict({ userId, product, offers, surface: req.source });
-    console.log(`snap: ${product._id} · ${offers.length} offers · ${verdict.kind}${saved ? "" : " (neutral)"} · vision ${tVision}ms · resolve ${tResolve}ms (${via}) · total ${Date.now() - t0}ms`);
+    // Similar items don't depend on the verdict: look them up while Worth-It thinks.
+    const [{ verdict, saved }, similar] = await Promise.all([getVerdict({ userId, product, offers, surface: req.source }), findSimilar(product)]);
+    console.log(`snap: ${product._id} · ${offers.length} offers · ${similar.length} similar · ${verdict.kind}${saved ? "" : " (neutral)"} · vision ${tVision}ms · resolve ${tResolve}ms (${via}) · total ${Date.now() - t0}ms`);
 
     if (env.MONGODB_URI) {
       const best = offers.find((o) => o._id === verdict.math.bestOfferId);
@@ -64,7 +65,7 @@ snap.post(
     }
 
     // Product/offer rows are validated where they're read; a failure here is our bug, not the client's.
-    const res = SnapResponse.safeParse({ product, offers, similar: [], verdict });
+    const res = SnapResponse.safeParse({ product, offers, similar, verdict });
     if (!res.success) {
       console.error("snap: invalid response:", res.error.message);
       return c.json({ error: "snap produced an invalid response" }, 500);
