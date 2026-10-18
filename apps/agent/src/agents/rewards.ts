@@ -26,7 +26,36 @@ export type RewardRecommendation = {
   why: string;
   /** Vector Search fit to the user's spending profile (0–1), when available. */
   fit?: number;
+  /** Where to actually sign up: the program's page, or a web search when we don't have a confirmed one. */
+  enrollUrl: string;
+  /** False when enrollUrl is a search, not the program's own page. */
+  enrollUrlVerified: boolean;
 };
+
+/**
+ * Sign-up pages for the curated programs, each checked to load (2026-10-18; AMC and REI block automated checks but are
+ * their long-standing member pages). Anything else — or a program added later — gets a "<name> sign up" web search
+ * rather than a guessed URL.
+ */
+const ENROLL_URLS: Record<string, string> = {
+  rwp_starbucks: "https://www.starbucks.com/rewards",
+  rwp_target_circle: "https://www.target.com/circle",
+  rwp_chipotle: "https://www.chipotle.com/rewards",
+  rwp_ikea_family: "https://www.ikea.com/us/en/ikea-family/",
+  rwp_walgreens: "https://www.walgreens.com/mywalgreens",
+  rwp_nordstrom: "https://www.nordstrom.com/browse/nordy-club",
+  rwp_safeway: "https://www.safeway.com/foru.html",
+  rwp_allegro_punch: "https://www.cafeallegro.com/",
+  rwp_amc_stubs: "https://www.amctheatres.com/amcstubs",
+  rwp_rei_coop: "https://www.rei.com/membership",
+};
+
+export function enrollLink(programId: string, name: string): { enrollUrl: string; enrollUrlVerified: boolean } {
+  const url = ENROLL_URLS[programId];
+  return url
+    ? { enrollUrl: url, enrollUrlVerified: true }
+    : { enrollUrl: `https://www.google.com/search?q=${encodeURIComponent(`${name} sign up`)}`, enrollUrlVerified: false };
+}
 
 /** Estimated $/yr from a year of spend at the program's merchants. */
 export function annualValue(p: RewardsProgram, spend: MerchantSpend[]): { cents: number; spend: number; visits: number; merchants: string[] } {
@@ -61,7 +90,7 @@ export async function rewardsScan(userId: string, surface: Surface = "web"): Pro
     .map((p) => {
       const a = annualValue(p, spend);
       return {
-        programId: p._id, name: p.name, perks: p.perks, estAnnualValueCents: a.cents,
+        programId: p._id, name: p.name, perks: p.perks, estAnnualValueCents: a.cents, ...enrollLink(p._id, p.name),
         status: status.get(p._id) ?? ("recommended" as const),
         spend12moCents: a.spend, visits12mo: a.visits, merchants: a.merchants, why: why(p, a),
         ...(fit.has(p._id) && { fit: Math.round(fit.get(p._id)! * 100) / 100 }),
@@ -80,7 +109,7 @@ export async function enroll(userId: string, programId: string, surface: Surface
   const rec = recs.find((r) => r.programId === programId);
   const program = rec ?? (await getRewardsPrograms()).find((p) => p._id === programId);
   if (!program) throw new HTTPException(404, { message: `unknown rewards program ${programId}` });
-  const r: RewardRecommendation = rec ?? { programId, name: program.name, perks: program.perks, estAnnualValueCents: 0, status: "recommended", spend12moCents: 0, visits12mo: 0, merchants: [], why: "" };
+  const r: RewardRecommendation = rec ?? { programId, name: program.name, perks: program.perks, estAnnualValueCents: 0, status: "recommended", spend12moCents: 0, visits12mo: 0, merchants: [], why: "", ...enrollLink(programId, program.name) };
   if (r.status === "enrolled") return r;
   if (!hasDb()) return { ...r, status: "enrolled" };
 

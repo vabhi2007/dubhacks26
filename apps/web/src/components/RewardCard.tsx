@@ -1,7 +1,7 @@
 // RewardCard — a loyalty program with its estimated $/yr and where that comes from (DESIGN.md §6, F6).
 // Presentational and self-contained (props in) so it can move into @alfred/ui. Only the view's single primary
 // action gets the gold button (§6: ≤ 1 primary action per view); the rest use the secondary style.
-import { Check } from "lucide-react";
+import { Check, ExternalLink } from "lucide-react";
 import { fmtUSD } from "@alfred/shared";
 import { cn } from "@alfred/ui";
 import type { RewardRecommendation } from "../lib/api";
@@ -61,7 +61,11 @@ export function RewardCard({
               primary ? "btn-gold" : "border border-border hover:bg-surface-2",
             )}
           >
-            {busy ? "Enrolling…" : "Enroll"}
+            {busy ? "Saving…" : (
+              <span className="inline-flex items-center gap-1.5">
+                Join <ExternalLink size={13} strokeWidth={2} aria-hidden />
+              </span>
+            )}
           </button>
         )}
       </div>

@@ -243,22 +243,22 @@ function tools(ctx: Ctx) {
     }),
     betaZodTool({
       name: "rewards_scan",
-      description: "Loyalty programs worth joining, ranked by estimated $/yr from the user's own spend at those merchants (and ones they're already in).",
+      description: "Loyalty programs worth joining, ranked by estimated $/yr from the user's own spend at those merchants (and ones they're already in), each with the link where the user signs up (signUpLink).",
       inputSchema: z.object({}),
       run: async () => {
         const rs = await rewardsScan(userId, surface);
         return rs.length
-          ? json(rs.slice(0, 6).map((r) => ({ programId: r.programId, name: r.name, perYear: usd(r.estAnnualValueCents), status: r.status, why: r.why })))
+          ? json(rs.slice(0, 6).map((r) => ({ programId: r.programId, name: r.name, perYear: usd(r.estAnnualValueCents), status: r.status, why: r.why, signUpLink: r.enrollUrl })))
           : "No programs look worthwhile from this spending.";
       },
     }),
     betaZodTool({
       name: "rewards_enroll",
-      description: "Join a rewards program the user explicitly asked to join (simulated one-tap enroll).",
+      description: "Record that the user HAS joined a rewards program — only after they confirm they finished signing up. Alfred can't sign anyone up: to help them join, give them the program's signUpLink from rewards_scan and ask them to tell you once they've joined.",
       inputSchema: z.object({ programId: z.string() }),
       run: async ({ programId }) => {
         const r = await enroll(userId, programId, surface);
-        ctx.turn.actions.push(`Joined ${r.name}${r.estAnnualValueCents ? ` (~${usd(r.estAnnualValueCents)}/yr)` : ""}.`);
+        ctx.turn.actions.push(`Recorded that you joined ${r.name}${r.estAnnualValueCents ? ` (~${usd(r.estAnnualValueCents)}/yr)` : ""}.`);
         return json({ status: r.status, name: r.name, perYear: usd(r.estAnnualValueCents) });
       },
     }),

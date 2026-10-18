@@ -208,18 +208,21 @@ export type RewardRecommendation = {
   /** One line for the card: where the $/yr comes from. */
   why: string;
   fit?: number;
+  /** The program's sign-up page (or a web search when there's no confirmed page). */
+  enrollUrl: string;
+  enrollUrlVerified: boolean;
 };
 
 // Offline example mirroring the seed's u_maya, so the page still tells the story without the agent.
 const fixtureRewards: RewardRecommendation[] = [
-  { programId: "rwp_starbucks", name: "Starbucks Rewards", perks: ["2 Stars per $1 — a handcrafted drink every 100–200 Stars", "Free birthday drink"], estAnnualValueCents: 54_20, status: "recommended", spend12moCents: 404_45, visits12mo: 80, merchants: ["Starbucks"], why: "$404/yr at Starbucks × 13.4% back" },
-  { programId: "rwp_chipotle", name: "Chipotle Rewards", perks: ["Points on every order", "Free chips & guac on your birthday"], estAnnualValueCents: 31_50, status: "recommended", spend12moCents: 393_72, visits12mo: 20, merchants: ["Chipotle"], why: "$394/yr at Chipotle × 8% back" },
-  { programId: "rwp_tmobile_tuesdays", name: "T-Mobile Tuesdays", perks: ["Weekly freebies and partner deals"], estAnnualValueCents: 30_00, status: "enrolled", spend12moCents: 1020_00, visits12mo: 12, merchants: ["T-Mobile"], why: "$30/yr in perks — you already shop at T-Mobile" },
+  { programId: "rwp_starbucks", name: "Starbucks Rewards", perks: ["2 Stars per $1 — a handcrafted drink every 100–200 Stars", "Free birthday drink"], estAnnualValueCents: 54_20, status: "recommended", spend12moCents: 404_45, visits12mo: 80, merchants: ["Starbucks"], why: "$404/yr at Starbucks × 13.4% back", enrollUrl: "https://www.starbucks.com/rewards", enrollUrlVerified: true },
+  { programId: "rwp_chipotle", name: "Chipotle Rewards", perks: ["Points on every order", "Free chips & guac on your birthday"], estAnnualValueCents: 31_50, status: "recommended", spend12moCents: 393_72, visits12mo: 20, merchants: ["Chipotle"], why: "$394/yr at Chipotle × 8% back", enrollUrl: "https://www.chipotle.com/rewards", enrollUrlVerified: true },
+  { programId: "rwp_tmobile_tuesdays", name: "T-Mobile Tuesdays", perks: ["Weekly freebies and partner deals"], estAnnualValueCents: 30_00, status: "enrolled", spend12moCents: 1020_00, visits12mo: 12, merchants: ["T-Mobile"], why: "$30/yr in perks — you already shop at T-Mobile", enrollUrl: "https://www.google.com/search?q=T-Mobile%20Tuesdays%20sign%20up", enrollUrlVerified: false },
 ];
 
 export const getRewards = () => withFallback<RewardRecommendation[]>(() => api("/rewards"), fixtureRewards);
 
-// Simulated one-tap enroll (idempotent). Returns the program with status "enrolled".
+// Records that the user joined (idempotent) — call only after they confirm they signed up on the program's site.
 export const enrollReward = (programId: string) =>
   api<RewardRecommendation>(`/rewards/${programId}/enroll`, { method: "POST", body: "{}" });
 

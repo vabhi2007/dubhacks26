@@ -1,14 +1,37 @@
 "use client";
 // Rewards — loyalty programs worth joining, valued in $/yr from the user's own merchant spend (DESIGN.md F6).
-// Live from GET /rewards; Enroll → POST /rewards/:programId/enroll (simulated one-tap). Fixtures only when offline.
-import { useEffect, useState } from "react";
+// Live from GET /rewards. "Join" opens the program's sign-up page in a new tab; when the user comes back to this tab we
+// ask whether they actually joined, and only a "yes" records it (POST /rewards/:programId/enroll). Fixtures when offline.
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { fmtUSD } from "@alfred/shared";
 import { MoneyStat } from "@alfred/ui";
 import { RewardCard } from "../../components/RewardCard";
+import { EnrollConfirmDialog } from "../../components/EnrollConfirmDialog";
 import { type ApiError, enrollReward, getRewards, type RewardRecommendation } from "../../lib/api";
 
 const sum = (rs: RewardRecommendation[]) => rs.reduce((a, r) => a + r.estAnnualValueCents, 0);
+
+/** A sign-up we sent the user to and haven't heard back about. Kept in sessionStorage so a reload still asks. */
+type Pending = { programId: string; name: string; url: string; openedAt: number };
+const PENDING_KEY = "alfred:pendingEnroll";
+const readPending = (): Pending | null => {
+  try {
+    return JSON.parse(sessionStorage.getItem(PENDING_KEY) ?? "null") as Pending | null;
+  } catch {
+    return null;
+  }
+};
+/** Called from the Join click handler (kept outside the component: it reads the clock). */
+const newPending = (r: RewardRecommendation): Pending => ({ programId: r.programId, name: r.name, url: r.enrollUrl, openedAt: Date.now() });
+const writePending = (p: Pending | null) => {
+  try {
+    if (p) sessionStorage.setItem(PENDING_KEY, JSON.stringify(p));
+    else sessionStorage.removeItem(PENDING_KEY);
+  } catch {
+    // storage unavailable (private mode): the question just won't survive a reload
+  }
+};
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-muted">{children}</h2>;
@@ -18,6 +41,8 @@ export default function Rewards() {
   const [rewards, setRewards] = useState<RewardRecommendation[] | null>(null);
   const [live, setLive] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [asking, setAsking] = useState<Pending | null>(null);
+  const pending = useRef<Pending | null>(null);
 
   useEffect(() => {
     getRewards().then((r) => {
@@ -26,15 +51,53 @@ export default function Rewards() {
     });
   }, []);
 
-  async function enroll(r: RewardRecommendation) {
-    setBusyId(r.programId);
+  // Back on this tab after visiting a sign-up page (or reloaded with one pending) → ask whether they joined.
+  const onReturn = useCallback(() => {
+    const p = pending.current ?? readPending();
+    if (!p || document.visibilityState !== "visible" || Date.now() - p.openedAt < 800) return;
+    pending.current = p;
+    setAsking(p);
+  }, []);
+
+  useEffect(() => {
+    const restore = setTimeout(onReturn, 0); // a reload with a sign-up pending
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    return () => {
+      clearTimeout(restore);
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+    };
+  }, [onReturn]);
+
+  function join(r: RewardRecommendation) {
+    const p = newPending(r);
+    pending.current = p;
+    writePending(p);
+    window.open(r.enrollUrl, "_blank", "noopener,noreferrer");
+    // If the new tab never took focus (pop-up blocked), ask right away — the dialog has an "Open it again" link.
+    setTimeout(() => {
+      if (pending.current === p && document.visibilityState === "visible" && document.hasFocus()) setAsking(p);
+    }, 1500);
+  }
+
+  const clearPending = () => {
+    pending.current = null;
+    writePending(null);
+    setAsking(null);
+  };
+
+  async function confirmJoined(p: Pending) {
+    setBusyId(p.programId);
     try {
-      const updated = await enrollReward(r.programId);
-      setRewards((rs) => rs?.map((x) => (x.programId === r.programId ? { ...x, status: updated.status } : x)) ?? null);
-      toast.success(`Joined ${r.name}${r.estAnnualValueCents ? ` — ~${fmtUSD(r.estAnnualValueCents, { compact: true })}/yr` : ""}`);
+      const updated = await enrollReward(p.programId);
+      const est = rewards?.find((x) => x.programId === p.programId)?.estAnnualValueCents ?? 0;
+      setRewards((rs) => rs?.map((x) => (x.programId === p.programId ? { ...x, status: updated.status } : x)) ?? null);
+      toast.success(`Joined ${p.name}${est ? ` — ~${fmtUSD(est, { compact: true })}/yr` : ""}`);
+      clearPending();
     } catch (e) {
       const err = e as ApiError;
-      toast.error(err.status == null ? "Agent offline — not enrolled" : err.body || `Enroll failed (${err.status})`);
+      toast.error(err.status == null ? "Agent offline — couldn't save that" : err.body || `Couldn't save (${err.status})`);
     } finally {
       setBusyId(null);
     }
@@ -71,7 +134,7 @@ export default function Rewards() {
               <SectionLabel>Recommended</SectionLabel>
               <div className="stagger grid gap-4 sm:grid-cols-2">
                 {recommended.map((r, i) => (
-                  <RewardCard key={r.programId} reward={r} primary={i === 0} busy={busyId === r.programId} onEnroll={() => enroll(r)} />
+                  <RewardCard key={r.programId} reward={r} primary={i === 0} busy={busyId === r.programId} onEnroll={() => join(r)} />
                 ))}
               </div>
             </section>
@@ -91,6 +154,16 @@ export default function Rewards() {
           {!live ? <p className="mt-6 text-xs text-text-muted">Agent offline — showing a saved example.</p> : null}
         </>
       )}
+
+      {asking ? (
+        <EnrollConfirmDialog
+          name={asking.name}
+          url={asking.url}
+          busy={busyId === asking.programId}
+          onYes={() => void confirmJoined(asking)}
+          onNo={clearPending}
+        />
+      ) : null}
     </div>
   );
 }
