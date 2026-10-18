@@ -10,6 +10,8 @@ type PendingSnap = { dataUrl: string; pageUrl?: string; at: number };
 
 // Vision models gain nothing past ~1568px on the long edge; smaller uploads are faster and stay under API image limits.
 const MAX_EDGE = 1568;
+// Agent: vision ≤ 12s budget + Worth-It ≈ 8–10s. Past this, say so instead of showing the skeleton forever.
+const SNAP_TIMEOUT_MS = 45_000;
 
 /** Downscale a captured frame to a JPEG and return its base64 (no data: prefix). */
 async function toUploadBase64(dataUrl: string): Promise<string> {
@@ -46,14 +48,21 @@ export default function App() {
       await browser.storage.session.remove("pendingSnap");
       setResult(null);
       setStatus({ kind: "snapping", preview: snap.dataUrl });
+      let image: string;
       try {
-        const image = await toUploadBase64(snap.dataUrl);
-        if (id !== latest.current) return;
+        image = await toUploadBase64(snap.dataUrl);
+      } catch {
+        if (id === latest.current) setStatus({ kind: "error", message: "Couldn't process the screenshot. Try snapping again." });
+        return;
+      }
+      if (id !== latest.current) return;
+      const timeout = AbortSignal.timeout(SNAP_TIMEOUT_MS);
+      try {
         const res = await fetch(`${AGENT_URL}/snap`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ image, source: "extension", pageUrl: snap.pageUrl }),
-          signal: ac.signal,
+          signal: AbortSignal.any([ac.signal, timeout]),
         });
         const body = await res.json().catch(() => null);
         if (!res.ok) throw new Error(body?.error ?? `Agent returned ${res.status}`);
@@ -64,7 +73,9 @@ export default function App() {
         setStatus({ kind: "idle" });
       } catch (e) {
         if (id !== latest.current || ac.signal.aborted) return;
-        const msg = e instanceof TypeError ? `Couldn't reach the agent at ${AGENT_URL}.` : (e as Error).message;
+        const msg = timeout.aborted
+          ? "The agent took too long to answer. Try snapping again."
+          : e instanceof TypeError ? `Couldn't reach the agent at ${AGENT_URL}.` : (e as Error).message;
         setStatus({ kind: "error", message: msg });
       }
     };
