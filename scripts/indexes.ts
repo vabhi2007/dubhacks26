@@ -1,9 +1,11 @@
 // `pnpm indexes` — Owner: A. Voyage embeddings for products + rewards_programs, then Atlas Search (products text) and
 // Vector Search (products, rewards_programs) indexes. Idempotent. Announce before running on the shared `alfred` db.
-// M0 allows 3 search indexes per *cluster* (all dbs): this needs exactly 3, and refuses to go over.
+// M0 allows 3 search indexes per *cluster* (all dbs): this needs exactly 3, refuses to go over, and only creates them on
+// the shared "alfred" db unless --force — a scratch-db run would otherwise take every slot (#29).
 //   --dry-run     plan only: cluster-wide index census + docs to embed. No writes, no Voyage calls.
 //   --embed-only  embed missing docs and check nearest neighbours locally; no indexes (safe on scratch dbs).
 //   --reembed     re-embed docs that already have an embedding (e.g. after changing productEmbeddingText).
+//   --force       create indexes on a db other than "alfred" (uses the cluster's slots — you probably want --embed-only).
 import "./env";
 import { closeDb, collections, getDb } from "@alfred/shared/db";
 import { MongoClient, type Document } from "mongodb";
@@ -13,7 +15,9 @@ const args = new Set(process.argv.slice(2));
 const DRY = args.has("--dry-run");
 const EMBED_ONLY = args.has("--embed-only");
 const REEMBED = args.has("--reembed");
+const FORCE = args.has("--force");
 const M0_LIMIT = 3;
+const SHARED_DB = "alfred";
 
 const vector = (extra: Document[] = []) => ({ fields: [{ type: "vector", path: "embedding", numDimensions: EMBEDDING_DIMS, similarity: "cosine" }, ...extra] });
 const DEFS = [
@@ -69,6 +73,14 @@ async function census(): Promise<Found[]> {
   return found;
 }
 
+/** mongosh one-liners to free the slots held by indexes outside the shared db. */
+function scratchDropHints(found: Found[]) {
+  const scratch = found.filter((f) => f.db !== SHARED_DB);
+  if (!scratch.length) return;
+  console.log(`scratch search indexes holding cluster slots — drop them so "${SHARED_DB}" can have its ${M0_LIMIT}:`);
+  for (const f of scratch) console.log(`  mongosh "$MONGODB_URI" --eval 'db.getSiblingDB("${f.db}").${f.coll}.dropSearchIndex("${f.name}")'`);
+}
+
 /** `have` contains everything in `want` (Atlas adds defaults to stored definitions). */
 const covers = (want: unknown, have: unknown): boolean =>
   want === null || typeof want !== "object"
@@ -115,6 +127,10 @@ async function ensureIndexes(existing: Found[]) {
   const mine = (d: (typeof DEFS)[number]) => existing.find((f) => f.db === db.databaseName && f.coll === d.coll && f.name === d.name);
   const toCreate = DEFS.filter((d) => !mine(d));
   if (existing.length + toCreate.length > M0_LIMIT) {
+    if (DRY) {
+      console.log(`  would need ${existing.length + toCreate.length} search indexes on the cluster (M0 limit ${M0_LIMIT}) — a real run would stop here`);
+      return;
+    }
     throw new Error(`would need ${existing.length + toCreate.length} search indexes on the cluster (M0 limit ${M0_LIMIT}). Existing: ${existing.map((f) => `${f.db}.${f.coll}/${f.name}`).join(", ")}`);
   }
   for (const d of DEFS) {
@@ -160,15 +176,37 @@ async function atlasSmoke() {
   console.log(`  $vectorSearch "${SMOKE.rewards}" → ${await vec("rewardsPrograms", SEARCH_INDEX.rewardsVector, SMOKE.rewards, "name")}`);
 }
 
-const dbName = (await getDb()).databaseName;
-console.log(`indexes: db "${dbName}"${DRY ? " — DRY RUN" : ""}${EMBED_ONLY ? " — embed only" : ""}`);
-const existing = await census();
-console.log(`cluster search indexes (${existing.length}/${M0_LIMIT}): ${existing.map((f) => `${f.db}.${f.coll}/${f.name}[${f.status}]`).join(", ") || "none"}`);
-await embed();
-if (EMBED_ONLY) {
-  if (!DRY) await localSmoke();
-} else {
-  await ensureIndexes(existing);
-  if (!DRY) await atlasSmoke();
+if (!process.env.MONGODB_URI) {
+  console.error("indexes: MONGODB_URI is not set — add it to the repo-root .env (see .env.example)");
+  process.exit(1);
 }
-await closeDb();
+
+try {
+  const dbName = (await getDb()).databaseName;
+  console.log(`indexes: db "${dbName}"${DRY ? " — DRY RUN" : ""}${EMBED_ONLY ? " — embed only" : ""}${FORCE ? " — FORCE" : ""}`);
+  const existing = await census();
+  console.log(`cluster search indexes (${existing.length}/${M0_LIMIT}): ${existing.map((f) => `${f.db}.${f.coll}/${f.name}[${f.status}]`).join(", ") || "none"}`);
+  scratchDropHints(existing);
+  const guarded = !EMBED_ONLY && dbName !== SHARED_DB && !FORCE;
+  if (guarded && !DRY) {
+    console.error(
+      `indexes: refusing to create search indexes on "${dbName}" — M0 allows ${M0_LIMIT} per cluster and "${SHARED_DB}" needs all of them.\n` +
+        `  On a scratch db use --embed-only (or --dry-run); pass --force only if you really mean to spend the cluster's slots here.`,
+    );
+    process.exitCode = 1;
+  } else {
+    await embed();
+    if (EMBED_ONLY) {
+      if (!DRY) await localSmoke();
+    } else {
+      if (guarded) console.log(`  (dry run: a real run would refuse on "${dbName}" without --force)`);
+      await ensureIndexes(existing);
+      if (!DRY) await atlasSmoke();
+    }
+  }
+} catch (e) {
+  console.error(`indexes: ${(e as Error).message}`);
+  process.exitCode = 1;
+} finally {
+  await closeDb();
+}

@@ -6,6 +6,7 @@ import type { Product, RewardsProgram } from "./schemas";
 export const EMBEDDING_MODEL = "voyage-3.5";
 export const EMBEDDING_DIMS = 1024;
 const BATCH = 128;
+const TIMEOUT_MS = 15_000; // per request — callers on the request path (B/C query embeds) must not hang
 
 /** Atlas Search / Vector Search index names created by `pnpm indexes` (M0: 3 per cluster, all used). */
 export const SEARCH_INDEX = {
@@ -20,13 +21,27 @@ async function voyage(texts: string[], inputType: "document" | "query"): Promise
   const base = process.env.VOYAGE_BASE_URL || "https://api.voyageai.com/v1";
   const out: number[][] = [];
   for (let i = 0; i < texts.length; i += BATCH) {
-    const r = await fetch(`${base}/embeddings`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-      body: JSON.stringify({ input: texts.slice(i, i + BATCH), model: EMBEDDING_MODEL, input_type: inputType }),
-    });
-    const d = (await r.json()) as { data?: { embedding: number[]; index: number }[]; detail?: string };
-    if (!r.ok || !d.data) throw new Error(`voyage: ${d.detail ?? `HTTP ${r.status}`}`);
+    let r: Response;
+    try {
+      r = await fetch(`${base}/embeddings`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+        body: JSON.stringify({ input: texts.slice(i, i + BATCH), model: EMBEDDING_MODEL, input_type: inputType }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+    } catch (e) {
+      const err = e as Error;
+      throw new Error(err.name === "TimeoutError" ? `voyage: no response after ${TIMEOUT_MS / 1000}s` : `voyage: ${err.message}`);
+    }
+    const body = await r.text();
+    let d: { data?: { embedding: number[]; index: number }[]; detail?: string } | undefined;
+    try {
+      d = JSON.parse(body);
+    } catch {
+      // non-JSON body, e.g. a proxy's HTML 502 page — reported below
+    }
+    if (!r.ok || !d?.data)
+      throw new Error(`voyage: ${d?.detail ?? `HTTP ${r.status}`}${d ? "" : ` (non-JSON response: ${body.slice(0, 80).replace(/\s+/g, " ").trim() || "empty"})`}`);
     out.push(...d.data.sort((a, b) => a.index - b.index).map((x) => x.embedding));
   }
   return out;
