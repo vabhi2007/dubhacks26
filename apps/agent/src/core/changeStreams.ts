@@ -4,7 +4,7 @@
 import { collections, type ChangeStreamInsertDocument, type Collection, type Document } from "@alfred/shared/db";
 import type { Approval } from "@alfred/shared";
 import { broadcast } from "./sse";
-import { pickCard, rewardFor } from "./purchase";
+import { pickCard, rewardFor } from "./cards";
 import { usd } from "./util";
 import { messenger } from "../messenger";
 

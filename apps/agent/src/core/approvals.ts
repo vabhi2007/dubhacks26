@@ -3,6 +3,7 @@
 import { collections, newId } from "@alfred/shared/db";
 import type { AgentName, Approval, ApprovalDecision, Mandate, Offer, Product, Surface } from "@alfred/shared";
 import { HTTPException } from "hono/http-exception";
+import { pickCard, rewardFor } from "./cards";
 import { emit } from "./events";
 import { isDuplicateKey, usd } from "./util";
 
@@ -21,8 +22,8 @@ export type ApprovalRequest = {
   surface?: Surface;
 };
 
-/** Approval plus what a card needs to render it. */
-export type ApprovalView = Approval & { product?: Product; offer?: Offer; mandate?: Mandate };
+/** Approval plus what ApprovalCard needs: the funding card's last4 and the reward it would earn. */
+export type ApprovalView = Approval & { product?: Product; offer?: Offer; mandate?: Mandate; cardLast4?: string; rewardCents?: number };
 
 /** Expiry is enforced in query filters; this flips stale pendings so they stop blocking the dedupe index. */
 async function expireStale(userId: string) {
@@ -75,13 +76,22 @@ export async function listApprovals(userId: string, status?: Approval["status"])
   const c = await collections();
   const approvals = await c.approvals.find({ userId, ...(status && { status }) }).sort({ expiresAt: -1 }).limit(50).toArray();
   const ids = (k: "productId" | "offerId" | "mandateId") => [...new Set(approvals.map((a) => a[k]).filter((x): x is string => !!x))];
-  const [products, offers, mandates] = await Promise.all([
+  const [products, offers, mandates, cards] = await Promise.all([
     c.products.find({ _id: { $in: ids("productId") } }, { projection: { embedding: 0 } }).toArray(),
     c.offers.find({ _id: { $in: ids("offerId") } }).toArray(),
     c.mandates.find({ _id: { $in: ids("mandateId") } }).toArray(),
+    c.cards.find({ userId }).toArray(),
   ]);
   const by = <T extends { _id: string }>(xs: T[], id?: string) => xs.find((x) => x._id === id);
-  return approvals.map((a) => ({ ...a, product: by(products, a.productId), offer: by(offers, a.offerId), mandate: by(mandates, a.mandateId) }));
+  return approvals.map((a) => {
+    const product = by(products, a.productId);
+    const mandate = by(mandates, a.mandateId);
+    const card = product && cards.length ? pickCard(cards, product.category, mandate) : undefined;
+    return {
+      ...a, product, offer: by(offers, a.offerId), mandate,
+      cardLast4: mandate?.card.last4 ?? card?.last4, rewardCents: card && product ? rewardFor(card, product.category, a.amountCents) : undefined,
+    };
+  });
 }
 
 /** Loads a pending, unexpired approval or throws 404/409. */

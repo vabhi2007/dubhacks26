@@ -5,9 +5,10 @@
 // Approving re-enters charge(): the human's YES satisfies (1); if the agent's mandate can't cover it, the approval mints a
 // single-use mandate for exactly that purchase, so money still only moves through authorize().
 import { collections, getClient, merchantIdFor, newId } from "@alfred/shared/db";
-import type { AgentName, Approval, ApprovalDecision, Card, Category, Mandate, Offer, Order, Product, Surface, User } from "@alfred/shared";
+import type { AgentName, Approval, ApprovalDecision, Card, Mandate, Offer, Order, Product, Surface, User } from "@alfred/shared";
 import { HTTPException } from "hono/http-exception";
 import { pendingApproval, requestApproval, resolveWithoutPurchase } from "./approvals";
+import { pickCard, rewardFor } from "./cards";
 import { emit } from "./events";
 import { authorize, whyDeclined } from "./mandates";
 import { isDuplicateKey, usd } from "./util";
@@ -47,19 +48,6 @@ async function load(userId: string, offerId: string): Promise<Ctx> {
   if (!product) throw new HTTPException(404, { message: `product ${offer.productId} not found` });
   return { user, offer, product, merchantId: merchantIdFor(offer.seller), cards };
 }
-
-const rate = (card: Card, category: Category) => card.rewards[category] ?? card.rewards.default ?? 0;
-
-/** Funding card: explicit pick, else the card behind the mandate's last4, else the best multiplier for the category. */
-export function pickCard(cards: Card[], category: Category, mandate?: Pick<Mandate, "card"> | null, cardId?: string): Card {
-  const card = cardId
-    ? cards.find((x) => x._id === cardId)
-    : (cards.find((x) => x.last4 === mandate?.card.last4) ?? [...cards].sort((a, b) => rate(b, category) - rate(a, category))[0]);
-  if (!card) throw new HTTPException(cardId ? 400 : 409, { message: cardId ? `card ${cardId} not found` : "no card on file" });
-  return card;
-}
-
-export const rewardFor = (card: Card, category: Category, amountCents: number) => Math.round(amountCents * rate(card, category));
 
 /** "Typical" price for savings: median current price of new, exact-match US offers. */
 async function referencePrice(productId: string) {
