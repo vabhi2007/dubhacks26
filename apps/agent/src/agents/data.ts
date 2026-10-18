@@ -1,7 +1,8 @@
 // Owner: B. Read-side data access for the agents. Every agent reads seed data through these functions only.
 import * as fx from "@alfred/shared/fixtures";
-import { collections } from "@alfred/shared/db";
-import type { Category, Device, Offer, Product, TradeInCurve, User, Verdict } from "@alfred/shared";
+import { collections, merchantIdFor } from "@alfred/shared/db";
+import { SEARCH_INDEX, voyageEmbedder } from "@alfred/shared/embed";
+import type { Category, Device, Enrollment, Offer, Product, RewardsProgram, TradeInCurve, User, Verdict } from "@alfred/shared";
 import { env } from "../env";
 import { withTimeout } from "../deal/timeout";
 
@@ -262,6 +263,49 @@ export async function getTradeInCurve(model: string): Promise<TradeInCurve | und
   const t = await fromSeed((c) => c.tradeinCurves.findOne({ model }));
   if (t !== undefined) return t ?? undefined;
   return model === FALLBACK_CURVE.model ? FALLBACK_CURVE : undefined;
+}
+
+// ---------- rewards (Rewards Optimizer) ----------
+
+export type MerchantSpend = { merchantId: string; name: string; category: Category; totalCents: number; visits: number };
+
+/** 12-month spend per merchant (positive amounts). Fixture fallback: the synthetic profile's top merchants. */
+export async function spendByMerchant(userId: string, now = new Date()): Promise<MerchantSpend[]> {
+  const rows = await fromSeed(async (c) => {
+    const agg = await c.transactions
+      .aggregate<{ _id: { merchantId: string; category: Category }; total: number; n: number }>([
+        { $match: { "meta.userId": userId, ts: { $gte: new Date(now.getTime() - 365 * DAY), $lte: now }, amountCents: { $gt: 0 } } },
+        { $group: { _id: { merchantId: "$meta.merchantId", category: "$meta.category" }, total: { $sum: "$amountCents" }, n: { $sum: 1 } } },
+      ])
+      .toArray();
+    const names = new Map((await c.merchants.find({ _id: { $in: agg.map((r) => r._id.merchantId) } }).toArray()).map((m) => [m._id, m.name]));
+    return agg.map((r) => ({ merchantId: r._id.merchantId, name: names.get(r._id.merchantId) ?? r._id.merchantId, category: r._id.category, totalCents: r.total, visits: r.n }));
+  });
+  if (rows?.length) return rows;
+  return FALLBACK_SPEND.flatMap((s) => s.topMerchants.map((m) => ({ merchantId: merchantIdFor(m.name), name: m.name, category: s.category, totalCents: m.totalCents, visits: m.txCount })));
+}
+
+export async function getRewardsPrograms(): Promise<RewardsProgram[]> {
+  return (await fromSeed((c) => c.rewardsPrograms.find({}, { projection: { embedding: 0 } }).toArray())) ?? [];
+}
+
+/** The user's enrollments (recommended / enrolled / dismissed), written by the Rewards Optimizer and seeded by A. */
+export async function getEnrollments(userId: string): Promise<Enrollment[]> {
+  return (await tryDb((c) => c.enrollments.find({ userId }).toArray())) ?? [];
+}
+
+/** Vector Search relevance of each rewards program to a free-text profile (programId → cosine score). Empty on any failure. */
+export async function rewardsRelevance(profile: string): Promise<Map<string, number>> {
+  if (SEED_SOURCE !== "mongo" || !env.VOYAGE_API_KEY) return new Map();
+  const rows = await tryDb(async (c) =>
+    c.rewardsPrograms
+      .aggregate<{ _id: string; score: number }>([
+        { $vectorSearch: { index: SEARCH_INDEX.rewardsVector, path: "embedding", queryVector: await voyageEmbedder.embedQuery(profile), numCandidates: 100, limit: 15 } },
+        { $project: { _id: 1, score: { $meta: "vectorSearchScore" } } },
+      ])
+      .toArray(),
+  );
+  return new Map((rows ?? []).map((r) => [r._id, r.score]));
 }
 
 // ---------- past purchases (duplicate-ownership check) ----------
