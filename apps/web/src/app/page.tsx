@@ -12,6 +12,7 @@ import { ApprovalCard, type ApprovalState, FeedItem, MoneyStat, VerdictCard } fr
 import {
   type ApiError,
   type ApprovalView,
+  type VerdictView,
   type WatchView,
   createWatch,
   getApprovals,
@@ -58,7 +59,7 @@ function StatePill({ children, tone }: { children: React.ReactNode; tone: "accen
 
 export default function Home() {
   const [stats, setStats] = useState<Stats | null>(null);
-  const [liveVerdict, setLiveVerdict] = useState<Verdict | null>(null);
+  const [liveVerdict, setLiveVerdict] = useState<VerdictView | null>(null);
   const [pending, setPending] = useState<ApprovalView[]>([]);
   const [receipts, setReceipts] = useState<ApprovalView[]>([]);
   const [wishlist, setWishlist] = useState<WatchView[]>([]);
@@ -149,7 +150,7 @@ export default function Home() {
 
   // Fixtures only when the agent is unreachable; otherwise live data (possibly empty).
   const feed = offline ? fixtureFeed : events;
-  const verdict = offline ? fxVerdict : liveVerdict;
+  const verdict: VerdictView | null = offline ? fxVerdict : liveVerdict;
 
   // Receipts to show: fetched resolved approvals, minus any still in the pending list.
   const shownReceipts = receipts.filter((r) => !pending.some((p) => p._id === r._id));
@@ -196,7 +197,7 @@ export default function Home() {
             {verdict ? (
               <VerdictCard
                 verdict={verdict}
-                product={{ title: verdictProductTitle(verdict.productId) ?? "", imageUrl: undefined }}
+                product={{ title: verdict.product?.title ?? verdictProductTitle(verdict.productId) ?? "", imageUrl: verdict.product?.imageUrl }}
                 actions={verdictCta}
               />
             ) : (
