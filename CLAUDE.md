@@ -39,4 +39,4 @@ Load the extension: `pnpm --filter @alfred/extension build`, then chrome://exten
 - Anything user-visible the agent does → `emit()` an AgentEvent (`apps/agent/src/core/events.ts`).
 - Claude: `claude-opus-5-5` for reasoning/verdicts, `claude-haiku-5-5` for bulk classification. Anthropic TS SDK Tool Runner; structured outputs for every Verdict.
 - UI: use tokens from `@alfred/ui/tokens.css` (`bg-surface`, `text-accent`, `rounded-card`, `.num` for money). Motion only on state change, 150–250ms, respect reduced motion (DESIGN.md §6).
-- Small commits, one branch per workstream (`ws-a/...`, `ws-b/...`), PR into `main`.
+- Git workflow, branches, commits, PRs, and shared-db rules: `docs/CONTRIBUTING.md`. Kickoff prompts per workstream: `docs/prompts/{A,B,C,D}.md`.
