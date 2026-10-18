@@ -9,7 +9,7 @@ export function ProductHeader({ product }: { product: Product }) {
       {product.imageUrl && <img src={product.imageUrl} alt="" className="size-14 rounded-control border border-border object-cover" />}
       <div className="min-w-0">
         <div className="truncate font-medium">{product.title}</div>
-        <div className="text-xs text-text-muted">{product.brand} · {product.model}</div>
+        {(product.brand || product.model) && <div className="text-xs text-text-muted">{[product.brand, product.model].filter(Boolean).join(" · ")}</div>}
       </div>
     </div>
   );
