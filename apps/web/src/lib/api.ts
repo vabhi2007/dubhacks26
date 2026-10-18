@@ -62,11 +62,15 @@ export const getApprovals = (status: Approval["status"]) =>
 
 export const getPendingApprovals = () => getApprovals("pending");
 
+// /verdicts responses carry the product's display info (B, #57) so surfaces can label the
+// verdict without a product-fetch route.
+export type VerdictView = Verdict & { product?: { title?: string; imageUrl?: string } };
+
 // A single verdict by id. Home fetches this from the newest `verdict` event's verdictId for
 // live updates. Returns null on 404/offline.
-export async function getVerdict(id: string): Promise<Verdict | null> {
+export async function getVerdict(id: string): Promise<VerdictView | null> {
   try {
-    return await api<Verdict>(`/verdicts/${id}`);
+    return await api<VerdictView>(`/verdicts/${id}`);
   } catch {
     return null;
   }
@@ -75,9 +79,9 @@ export async function getVerdict(id: string): Promise<Verdict | null> {
 // The newest verdict (GET /verdicts?limit=1, added by B in #40), so Home shows the real latest
 // verdict on first load before any in-session verdict event. Returns null when live-but-empty
 // or the agent is offline — the caller keeps the empty state / fixture fallback.
-export async function getLatestVerdict(): Promise<Verdict | null> {
+export async function getLatestVerdict(): Promise<VerdictView | null> {
   try {
-    const list = await api<Verdict[]>("/verdicts?limit=1");
+    const list = await api<VerdictView[]>("/verdicts?limit=1");
     return list[0] ?? null;
   } catch {
     return null;
