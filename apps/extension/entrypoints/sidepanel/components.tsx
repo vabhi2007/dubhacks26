@@ -40,14 +40,22 @@ export function VerdictCard({ verdict }: { verdict: Verdict }) {
   );
 }
 
-/** Reasons as one muted paragraph clamped to 2 lines; "more" opens them as a list (only offered when clipped). */
+/**
+ * Reasons as one muted paragraph clamped to 2 lines; "more" opens them as a list (only offered when clipped).
+ * Re-measured on resize: the side panel can be narrowed after render, clipping text that used to fit.
+ */
 function Reasons({ reasons }: { reasons: string[] }) {
   const [open, setOpen] = useState(false);
   const [clipped, setClipped] = useState(false);
   const ref = useRef<HTMLParagraphElement>(null);
   useLayoutEffect(() => {
     const el = ref.current;
-    if (el && !open) setClipped(el.scrollHeight > el.clientHeight + 1);
+    if (!el || open) return;
+    const measure = () => setClipped(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [reasons, open]);
 
   return (
@@ -131,7 +139,8 @@ const CONDITION_DOT: Record<Offer["condition"], string> = {
 export function OfferStrip({ offers, bestOfferId }: { offers: Offer[]; bestOfferId?: string }) {
   if (!offers.length) return <p className="text-sm text-text-muted">No offers found.</p>;
   const { dots, rows } = stripLayout(offers);
-  const best = offers.find((o) => o._id === bestOfferId) ?? dots[0]!.offer;
+  // Offers arrive ranked (best new US exact first), so without a verdict pick the top-ranked one, not the cheapest.
+  const best = offers.find((o) => o._id === bestOfferId) ?? offers[0]!;
   const prices = offers.map((o) => o.priceCents);
   const count = (c: Offer["condition"]) => offers.filter((o) => o.condition === c).length;
 
