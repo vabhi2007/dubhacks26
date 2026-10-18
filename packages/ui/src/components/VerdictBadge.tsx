@@ -1,5 +1,6 @@
 // Reference component showing token usage. Owner: D — build VerdictCard, ApprovalCard, etc. alongside (DESIGN.md §6).
 import type { Verdict } from "@alfred/shared";
+import { fmtUSD } from "@alfred/shared";
 import { cn } from "../cn";
 
 const styles: Record<Verdict["kind"], string> = {
@@ -23,12 +24,16 @@ export function VerdictBadge({ kind, detail, className }: { kind: Verdict["kind"
   );
 }
 
-/** How long a "wait" verdict says to wait, short enough for the badge: "4 mo", "~6 days", "~3 wks". */
+/**
+ * What a "wait" verdict is waiting for, short enough for the badge. Timekeeper: how long ("4 mo" — computed from
+ * financing and the trade-in curve). Worth-It: the price it has dropped to ("~$149") — never a day count, since sales
+ * don't follow a schedule.
+ */
 export function waitDetail(v: Verdict): string | undefined {
   if (v.kind !== "wait") return undefined;
   const months = v.timekeeper?.waitMonths;
   if (months != null && months > 0) return `${Math.round(months * 10) / 10} mo`;
-  const days = v.math.expectedWaitDays;
-  if (days != null && days > 0) return days < 14 ? `~${days} day${days === 1 ? "" : "s"}` : `~${Math.round(days / 7)} wks`;
+  const drop = v.math.expectedDropCents;
+  if (drop && drop > 0) return `~${fmtUSD(v.math.priceCents - drop, { compact: true })}`;
   return undefined;
 }

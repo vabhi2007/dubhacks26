@@ -99,7 +99,12 @@ export function VerdictCard({
         <p className="line-clamp-2 min-w-0 flex-1 font-serif text-[18px] leading-snug tracking-tight" title={product?.title || verdict.headline}>
           {product?.title || verdict.headline}
         </p>
-        <VerdictBadge kind={verdict.kind} detail={waitDetail(verdict)} className="shrink-0" />
+        {/* When Alfred is already watching, the eye + price says what we're waiting for; keep only Timekeeper's duration. */}
+        <VerdictBadge
+          kind={verdict.kind}
+          detail={watchingCents != null && !verdict.timekeeper ? undefined : waitDetail(verdict)}
+          className="shrink-0"
+        />
         {watchingCents != null ? (
           <span className="inline-flex shrink-0 items-center gap-1.5 text-accent" title={`Watching — buys at ${fmtUSD(watchingCents)}`}>
             <Eye />
