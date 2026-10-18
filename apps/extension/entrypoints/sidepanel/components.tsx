@@ -1,7 +1,8 @@
 // Owner: C. Local side-panel components on @alfred/ui tokens. Replace with D's shared components as they land.
 import { useState, type ReactNode } from "react";
-import { fmtUSD, type Offer, type Product, type Verdict, type WishlistItem } from "@alfred/shared";
+import { fmtUSD, type Offer, type Product, type Verdict } from "@alfred/shared";
 import { cn, VerdictBadge } from "@alfred/ui";
+import { statusFromItem, type WatchStatus } from "./watchStatus";
 
 export function ProductHeader({ product }: { product: Product }) {
   return (
@@ -93,7 +94,7 @@ function Chip({ children }: { children: ReactNode }) {
   return <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] text-text-muted">{children}</span>;
 }
 
-type WatchState = { kind: "idle" | "saving" } | { kind: "done"; status: WishlistItem["status"] } | { kind: "error"; message: string };
+type WatchState = { kind: "idle" | "saving" } | { kind: "error"; message: string };
 
 const DEFAULT_DISCOUNT = 0.1; // no expected drop → watch for 10% off
 
@@ -106,20 +107,24 @@ export function watchTarget(priceCents: number, expectedDropCents = 0): number |
   return t >= 1 && t < priceCents ? t : undefined;
 }
 
-const doneLabel: Record<WishlistItem["status"], (t: string) => string> = {
-  watching: (t) => `Watching — buys at ${t} or less`,
-  triggered: () => "Price already hit — asked you to approve",
-  bought: () => "Price already hit — bought, see your feed",
-  cancelled: () => "Watch cancelled",
-};
+const statusLabel = (s: WatchStatus, target?: string) =>
+  s.kind === "watching" ? (target ? `Watching — buys at ${target} or less` : "Watching this price")
+  : s.kind === "approval" ? "Price hit — waiting for your approval"
+  : "Bought";
 
-/** POST /wishlist (B). The Watcher may buy at the target through a mandate, or ask first — the label says so. */
-export function WatchButton({ agentUrl, product, verdict }: { agentUrl: string; product: Product; verdict: Verdict }) {
+/**
+ * POST /wishlist (B). The Watcher may buy at the target through a mandate, or ask first — the label says so.
+ * `status` is the live watch state for this product (watchStatus.ts); once known, it drives the label.
+ */
+export function WatchButton({ agentUrl, product, verdict, status, onStatus }: {
+  agentUrl: string; product: Product; verdict: Verdict; status: WatchStatus | null; onStatus: (s: WatchStatus) => void;
+}) {
   const [state, setState] = useState<WatchState>({ kind: "idle" });
   const target = watchTarget(verdict.math.priceCents, verdict.math.expectedDropCents);
-  if (target === undefined) return null;
+  if (target === undefined && !status) return null;
 
   const watch = async () => {
+    if (target === undefined) return;
     setState({ kind: "saving" });
     try {
       const res = await fetch(`${agentUrl}/wishlist`, {
@@ -131,25 +136,34 @@ export function WatchButton({ agentUrl, product, verdict }: { agentUrl: string; 
       if (res.status === 501) throw new Error("Watching isn't live yet on the agent.");
       if (res.status === 503) throw new Error("Watching needs the agent's database (MONGODB_URI).");
       if (!res.ok) throw new Error(body?.error ?? `Agent returned ${res.status}`);
-      setState({ kind: "done", status: body?.status ?? "watching" });
+      onStatus(statusFromItem(body?.status ?? "watching") ?? { kind: "watching" });
+      setState({ kind: "idle" });
     } catch (e) {
       setState({ kind: "error", message: e instanceof TypeError ? "Couldn't reach the agent." : (e as Error).message });
     }
   };
 
+  const shown = target === undefined ? undefined : fmtUSD(target);
   return (
     <div className="flex flex-col gap-1.5">
       <button
         type="button"
         onClick={watch}
-        disabled={state.kind === "saving" || state.kind === "done"}
-        className="rounded-control bg-accent px-4 py-2.5 text-sm font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover disabled:opacity-60"
+        disabled={!!status || state.kind === "saving"}
+        className={cn(
+          "rounded-control px-4 py-2.5 text-sm font-medium transition-colors duration-150 disabled:opacity-100",
+          status?.kind === "bought" ? "bg-buy/15 text-buy" : status ? "bg-accent-subtle text-text" : "bg-accent text-on-accent hover:bg-accent-hover disabled:opacity-60",
+        )}
       >
-        {state.kind === "done" ? doneLabel[state.status](fmtUSD(target)) : state.kind === "saving" ? "Saving…" : `Watch — buy at ${fmtUSD(target)} or less`}
+        <span key={status?.kind ?? state.kind} className="fade-in inline-block">
+          {status ? statusLabel(status, shown) : state.kind === "saving" ? "Saving…" : `Watch — buy at ${shown} or less`}
+        </span>
       </button>
-      {state.kind === "idle" && (
+      {status?.note ? (
+        <p key={status.note} className="fade-in text-xs text-text-muted">{status.note}</p>
+      ) : !status && state.kind === "idle" ? (
         <p className="text-xs text-text-muted">Buys through a mandate if one covers it; otherwise asks you first.</p>
-      )}
+      ) : null}
       {state.kind === "error" && <p role="alert" className="text-xs text-skip">{state.message}</p>}
     </div>
   );

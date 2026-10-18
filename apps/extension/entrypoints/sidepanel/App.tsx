@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { APP_NAME, SnapResponse } from "@alfred/shared";
 import { OfferList, ProductHeader, VerdictCard, WatchButton } from "./components";
+import { useWatchStatus } from "./watchStatus";
 
 const AGENT_URL = import.meta.env.WXT_AGENT_URL ?? "http://localhost:8787";
 
@@ -88,7 +89,9 @@ export default function App() {
     };
   }, []);
 
-  const canWatch = result && result.offers.length > 0 && result.verdict.kind !== "skip";
+  const watch = useWatchStatus(AGENT_URL, result?.product._id);
+  // A watch that already exists (or fired) stays visible even when this verdict says skip.
+  const canWatch = result && ((result.offers.length > 0 && result.verdict.kind !== "skip") || !!watch.status);
 
   return (
     <main className="flex min-h-screen flex-col gap-4 p-5">
@@ -109,7 +112,7 @@ export default function App() {
         <div className="fade-in flex flex-col gap-4" key={result.verdict._id}>
           <ProductHeader product={result.product} />
           <VerdictCard verdict={result.verdict} />
-          {canWatch && <WatchButton agentUrl={AGENT_URL} product={result.product} verdict={result.verdict} />}
+          {canWatch && <WatchButton agentUrl={AGENT_URL} product={result.product} verdict={result.verdict} status={watch.status} onStatus={watch.setStatus} />}
           <OfferList offers={result.offers} bestOfferId={result.verdict.math.bestOfferId} />
         </div>
       )}
