@@ -15,7 +15,7 @@
 
 One **Spending Profile** (mock transaction history) powers every feature. Every action lands in one **Agent Feed**, regardless of surface (dashboard, extension, iMessage).
 
-Tracks targeted: **Visa** (main), **Perceptron** (perception), **Photon** (iMessage), **VEYZL**, **T-Mobile**, **Cloudforce** Side Kick, **SideShift** (pitch only). Stretch: **Photon Voice**.
+Tracks targeted: **Visa** (main), **Perceptron** (perception), **Photon** (iMessage), **VEYZL**, **T-Mobile**, **SideShift** (pitch only). Stretch: **Photon Voice**.
 
 ## 2. Features
 
@@ -29,7 +29,6 @@ Tracks targeted: **Visa** (main), **Perceptron** (perception), **Photon** (iMess
 | F6 | **Rewards Optimizer** | Mines merchant spend → recommends (simulated one-tap enroll) from ~15 curated programs with $/yr estimate | Visa |
 | F7 | **iMessage Agent** | Photon 2.0: approvals (YES/NO), photo intake, "should I buy this?" chat, rewards nudges. Shares conversation state with web | Photon |
 | F8 | **Timekeeper** | Worth-It mode for phones: "Upgrade now / wait N months" from device age, financing balance, trade-in decay curve, usage; optional household plan fit | T-Mobile |
-| F9 | **Spending Personality Side Kick** | Standalone 3-question agent built in Cloudforce Purple; posted to LinkedIn early | Cloudforce |
 | S1 | *(stretch)* **Voice approvals** | High-stakes approvals (> call threshold) via outbound call on Photon SMS number → SIP → Retell/ElevenLabs; transcript to feed | Photon Voice |
 
 **Non-goals:** real payments, real loyalty enrollment, real bank data, auth/multi-tenant, deployment.
@@ -288,7 +287,6 @@ interface Embedder  { embed(texts: string[]): Promise<number[][]> }
 **Owns:** `packages/ui`, `apps/web`, pitch assets.
 - Design tokens (Section 6) + shared components (start with static mock props from Section 8 types so C can consume immediately).
 - Dashboard pages: Home, Feed, Spending Profile (Recharts + one embedded Atlas Chart), Wishlist, Mandates, Rewards, Timekeeper, Chat panel; `/admin` UI.
-- **Cloudforce Side Kick** (F9) in Purple — build and post early Saturday.
 - Demo video, slides, Devpost write-up, SideShift startup angle (creator-video → affiliate distribution).
 
 ### Integration points (who waits on whom — use mocks until ready)
@@ -306,7 +304,7 @@ interface Embedder  { embed(texts: string[]): Promise<number[][]> }
 | **MVP-0 — Core loop** | **~3–4h** | Dashboard Home shows stats, live Agent Feed (SSE), latest verdict, pending approvals. Extension snap → `/snap` (mock vision + mock/cached prices) → **real Claude Worth-It verdict** in the side panel → Watch. `/admin` price drop → Watcher creates approval → approve on web → `purchase()` via mandate → feed + stats update live. iMessage = console. |
 | **MVP-1 — Real inputs & iMessage** | ~+3–4h | Perceptron vision live; SerpAPI live with cache + Haiku labeling; Atlas Search product resolution; Photon iMessage: approvals (YES/NO), photo intake → snap, verdict summaries; orchestrator + `/chat`. |
 | **MVP-2 — Feature breadth** | ~+3–4h | Rewards Optimizer (+ Vector Search), Smart Pay, Timekeeper (T-Mobile), Spending Profile charts, Wishlist + Mandates pages, region-select + video-frame snap. |
-| **MVP-3 — Polish & submit** | remaining | Motion pass, empty/loading/error states, reduced motion, demo reset reliable, VEYZL before/after, Side Kick posted, pitch + video, track submissions. |
+| **MVP-3 — Polish & submit** | remaining | Motion pass, empty/loading/error states, reduced motion, demo reset reliable, VEYZL before/after, pitch + video, track submissions. |
 | *Stretch* | — | Photon Voice outbound approval call (S1). |
 
 ### MVP-0 scope per workstream
