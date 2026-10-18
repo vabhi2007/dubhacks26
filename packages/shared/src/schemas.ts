@@ -203,6 +203,7 @@ export const Verdict = z.object({
     relatedSpend12moCents: Cents.optional(),
     budgetImpactPct: z.number().optional(),
     expectedDropCents: Cents.optional(),
+    expectedWaitDays: z.number().int().nonnegative().optional(), // Worth-It "wait": days until the next likely sale, from dip cadence
   }),
   smartPay: z.object({ cardId: z.string(), offerId: z.string().optional(), rewardCents: Cents }).optional(),
   timekeeper: z.object({
