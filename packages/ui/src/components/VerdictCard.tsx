@@ -1,7 +1,8 @@
 "use client";
 // VerdictCard — the Worth-It / Timekeeper verdict, identical on web and extension.
-// Collapsed: image, product, headline, badge (with how long to wait), actions. "Details" expands the reasons, the math
-// chips, Smart Pay, then the caller's `details` (graphs) — mounted only once opened, so they can fetch lazily.
+// Collapsed: image, product, badge (with how long to wait), actions — the headline is left to the surrounding copy
+// (chat reply, feed) and only shown when there's no product title. "Details" expands the reasons, the math chips,
+// Smart Pay, then the caller's `details` (graphs) — mounted only once opened, so they can fetch lazily.
 // Presentational: callers pass their own action buttons via `actions` (Watch / Buy).
 import { type ReactNode, useId, useState } from "react";
 import type { Product, Verdict } from "@alfred/shared";
@@ -73,7 +74,7 @@ export function VerdictCard({
 
   return (
     <div className={cn("rounded-card border border-border bg-surface p-6", className)}>
-      <div className="flex items-start gap-4">
+      <div className="flex items-center gap-4">
         {product?.imageUrl ? (
           // Plain <img>: this card is shared with the extension, which has no next/image.
           <img
@@ -83,10 +84,7 @@ export function VerdictCard({
             loading="lazy"
           />
         ) : null}
-        <div className="min-w-0 flex-1">
-          {product?.title ? <div className="truncate text-sm text-text-muted">{product.title}</div> : null}
-          <p className="mt-1 font-serif text-[20px] leading-snug tracking-tight">{verdict.headline}</p>
-        </div>
+        <p className="min-w-0 flex-1 font-serif text-[20px] leading-snug tracking-tight">{product?.title || verdict.headline}</p>
         <VerdictBadge kind={verdict.kind} detail={waitDetail(verdict)} className="shrink-0" />
       </div>
 
@@ -137,7 +135,7 @@ export function VerdictCard({
               </div>
             ) : null}
 
-            {details && opened ? <div className="mt-6 space-y-6">{details}</div> : null}
+            {details && opened ? <div className="mt-6">{details}</div> : null}
           </div>
         </div>
       </div>
