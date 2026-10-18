@@ -20,6 +20,11 @@ type State = {
 };
 
 const byNewest = (a: AgentEvent, b: AgentEvent) => new Date(b.ts).getTime() - new Date(a.ts).getTime();
+const mergeById = (prev: AgentEvent[], next: AgentEvent[]) => {
+  const byId = new Map(prev.map((e) => [e._id, e]));
+  for (const e of next) byId.set(e._id, e);
+  return [...byId.values()].sort(byNewest);
+};
 
 export function useEventHistory(): State {
   const [state, setState] = useState<State>({ events: [], status: "pending", ready: false, fresh: new Set() });
@@ -41,7 +46,8 @@ export function useEventHistory(): State {
         for (const q of batch) if (q.fresh) fresh.add(q.e._id);
         return {
           ...s,
-          events: batch.length ? [...batch.map((q) => q.e), ...s.events].sort(byNewest) : s.events,
+          // Merge by _id: Fast Refresh / remounts keep state but re-run this effect (fresh `seen`), replaying the backlog.
+          events: batch.length ? mergeById(s.events, batch.map((q) => q.e)) : s.events,
           fresh,
           ready: s.ready || Boolean(ready),
         };
