@@ -2,7 +2,7 @@
 // /wishlist/[productId] — the sub-page behind a watchlist row (DESIGN.md §6): price-history line
 // chart (with target line + today dot), break-even bar chart, offers dot strip, and the verdict.
 // Data from GET /products/:id (A); fixture bundle when offline.
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
@@ -28,7 +28,7 @@ function SectionCard({ label, children }: { label: string; children: React.React
   );
 }
 
-export default function ProductDetailPage() {
+function ProductDetail() {
   const { productId } = useParams<{ productId: string }>();
   const [detail, setDetail] = useState<ProductDetail | null>(null);
 
@@ -106,5 +106,14 @@ export default function ProductDetailPage() {
         </SectionCard>
       </div>
     </div>
+  );
+}
+
+// useParams() needs a Suspense boundary so this dynamic route can prerender (Next 16 Cache Components).
+export default function ProductDetailPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-sm text-text-muted">Loading…</div>}>
+      <ProductDetail />
+    </Suspense>
   );
 }

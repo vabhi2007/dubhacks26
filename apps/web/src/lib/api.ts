@@ -1,7 +1,7 @@
 // Typed client for the agent service (DESIGN.md §8.3).
 // Routes may be absent (connection refused) or stubbed (501) while teammates build —
 // readers fall back to @alfred/shared fixtures so the dashboard always renders.
-import type { Approval, ApprovalDecision, Mandate, Offer, Order, Product, Stats, Verdict, WishlistItem } from "@alfred/shared";
+import type { Approval, ApprovalDecision, ChatRequest, Mandate, Offer, Order, Product, Stats, Verdict, WishlistItem } from "@alfred/shared";
 import * as fx from "@alfred/shared/fixtures";
 
 export const AGENT_URL = process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8787";
@@ -219,3 +219,47 @@ export const getRewards = () => withFallback<RewardRecommendation[]>(() => api("
 // Simulated one-tap enroll (idempotent). Returns the program with status "enrolled".
 export const enrollReward = (programId: string) =>
   api<RewardRecommendation>(`/rewards/${programId}/enroll`, { method: "POST", body: "{}" });
+
+// POST /chat streams SSE frames: {delta}… then {done, verdictId?} (or {error} then {done}).
+export type ChatFrame = { delta?: string; done?: boolean; verdictId?: string; error?: string };
+
+// EventSource can't POST, so read the response body and split it into SSE frames by hand.
+// Throws an ApiError like api() on a non-2xx response (no `status` = agent unreachable).
+export async function* streamChat(text: string, signal?: AbortSignal): AsyncGenerator<ChatFrame> {
+  const res = await fetch(`${AGENT_URL}/chat`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text, surface: "web" } satisfies ChatRequest),
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    const body = await res.text().catch(() => "");
+    const err = new Error(`${res.status} /chat${body ? `: ${body}` : ""}`) as ApiError;
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) return;
+    buf += value;
+    let end: number;
+    while ((end = buf.indexOf("\n\n")) >= 0) {
+      const data = buf
+        .slice(0, end)
+        .split("\n")
+        .filter((l) => l.startsWith("data:"))
+        .map((l) => l.slice(5).replace(/^ /, ""))
+        .join("\n");
+      buf = buf.slice(end + 2);
+      if (!data) continue;
+      try {
+        yield JSON.parse(data) as ChatFrame;
+      } catch {
+        // ignore a malformed frame
+      }
+    }
+  }
+}

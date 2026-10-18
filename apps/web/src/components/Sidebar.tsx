@@ -29,7 +29,7 @@ const NAV: Item[] = [
   { href: "/mandates", label: "Mandates", icon: CreditCard },
   { href: "/rewards", label: "Rewards", icon: Gift },
   { href: "/timekeeper", label: "Timekeeper", icon: Clock },
-  { href: "/chat", label: "Chat", icon: MessageSquare, soon: true },
+  { href: "/chat", label: "Chat", icon: MessageSquare },
 ];
 
 export function Sidebar() {
