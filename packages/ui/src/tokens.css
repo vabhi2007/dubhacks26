@@ -11,6 +11,7 @@
   --accent-hover: #B07C0E;
   --accent-subtle: rgba(201, 142, 18, 0.10);
   --on-accent: #141414;
+  --gold-gradient: linear-gradient(180deg, #DDA72A 0%, #C98E12 55%, #A9760C 100%);
   --buy: #2F8F5B;
   --wait: #C98E12;
   --skip: #C9482F;
@@ -27,6 +28,7 @@
   --accent-hover: #EDB842;
   --accent-subtle: rgba(226, 168, 41, 0.12);
   --on-accent: #141414;
+  --gold-gradient: linear-gradient(180deg, #F0C04A 0%, #E2A829 55%, #C8901A 100%);
   --buy: #4CAF7A;
   --wait: #E2A829;
   --skip: #E5654B;
@@ -47,11 +49,26 @@
   --color-wait: var(--wait);
   --color-skip: var(--skip);
 
-  --radius-card: 10px;
-  --radius-control: 8px;
+  /* Square on everything (§6). Credit-card visuals (mandates) are the one exception. */
+  --radius-card: 0px;
+  --radius-control: 0px;
+  --radius-card-visual: 12px;
 
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Money and numbers always use tabular mono figures */
-.num { font-family: var(--font-geist-mono, ui-monospace, monospace); font-variant-numeric: tabular-nums; }
+/* Money / numbers / counts: Inter Tight, tabular, semibold (§6). */
+.num {
+  font-family: var(--font-inter-tight, ui-sans-serif, system-ui, sans-serif);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* Primary (yellow) buttons: a subtle gold sheen, not shiny; hover brightens ~4% (§6). */
+.btn-gold {
+  background-image: var(--gold-gradient);
+  color: var(--on-accent);
+}
+.btn-gold:hover:not(:disabled) {
+  filter: brightness(1.04);
+}

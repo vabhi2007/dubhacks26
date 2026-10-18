@@ -35,7 +35,7 @@ export function MandateCard({
   const scope = [...categories, ...merchants];
 
   return (
-    <div className={cn("rounded-card border border-border bg-surface p-5", className)}>
+    <div className={cn("rounded-card-visual border border-border bg-surface p-5", className)}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate text-[15px] font-medium">{label}</div>
@@ -44,7 +44,7 @@ export function MandateCard({
             {card?.last4 ? <> · ••{card.last4}</> : null}
           </div>
         </div>
-        <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize", STATUS_STYLE[status])}>
+        <span className={cn("shrink-0 rounded-none px-2.5 py-0.5 text-xs font-medium capitalize", STATUS_STYLE[status])}>
           {status}
         </span>
       </div>
@@ -54,18 +54,15 @@ export function MandateCard({
           <span className="num">{fmtUSD(spentCents)}</span>
           <span className="num text-text-muted">of {fmtUSD(capCents)}</span>
         </div>
-        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-2">
-          <div
-            className={cn("h-full rounded-full", pct >= 100 ? "bg-skip" : "bg-accent")}
-            style={{ width: `${pct}%` }}
-          />
+        <div className="mt-1.5 h-1.5 overflow-hidden bg-surface-2">
+          <div className={cn("h-full", pct >= 100 ? "bg-skip" : "bg-accent")} style={{ width: `${pct}%` }} />
         </div>
       </div>
 
       {scope.length ? (
         <div className="mt-4 flex flex-wrap gap-1.5">
           {scope.map((s) => (
-            <span key={s} className="rounded-full border border-border bg-surface-2 px-2.5 py-1 text-xs capitalize text-text-muted">
+            <span key={s} className="rounded-none border border-border bg-surface-2 px-2.5 py-1 text-xs capitalize text-text-muted">
               {s}
             </span>
           ))}

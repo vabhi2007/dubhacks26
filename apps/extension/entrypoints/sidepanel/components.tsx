@@ -1,6 +1,6 @@
 // Owner: C. Local side-panel components on @alfred/ui tokens. Replace with D's shared components as they land.
 import { useState, type ReactNode } from "react";
-import { fmtUSD, type Offer, type Product, type Verdict } from "@alfred/shared";
+import { fmtUSD, watchTarget, type Offer, type Product, type Verdict } from "@alfred/shared";
 import { cn, VerdictBadge } from "@alfred/ui";
 import { statusFromItem, type WatchStatus } from "./watchStatus";
 
@@ -95,17 +95,6 @@ function Chip({ children }: { children: ReactNode }) {
 }
 
 type WatchState = { kind: "idle" | "saving" } | { kind: "error"; message: string };
-
-const DEFAULT_DISCOUNT = 0.1; // no expected drop → watch for 10% off
-
-/**
- * The Watcher (B) buys as soon as the best price is ≤ target, so the target must be strictly below today's price —
- * otherwise "Watch" is an immediate purchase. Expected drop when there is one, else 10% off; undefined if neither fits.
- */
-export function watchTarget(priceCents: number, expectedDropCents = 0): number | undefined {
-  const t = expectedDropCents > 0 && expectedDropCents < priceCents ? priceCents - expectedDropCents : Math.floor(priceCents * (1 - DEFAULT_DISCOUNT));
-  return t >= 1 && t < priceCents ? t : undefined;
-}
 
 const statusLabel = (s: WatchStatus, target?: string) =>
   s.kind === "watching" ? (target ? `Watching — buys at ${target} or less` : "Watching this price")

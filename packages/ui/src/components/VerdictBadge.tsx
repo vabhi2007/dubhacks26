@@ -10,7 +10,7 @@ const styles: Record<Verdict["kind"], string> = {
 
 export function VerdictBadge({ kind, className }: { kind: Verdict["kind"]; className?: string }) {
   return (
-    <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium uppercase tracking-wide", styles[kind], className)}>
+    <span className={cn("inline-flex items-center rounded-none px-2.5 py-0.5 text-xs font-medium uppercase tracking-wide", styles[kind], className)}>
       {kind}
     </span>
   );
