@@ -1,14 +1,14 @@
-// Owner: B. Agent routes (DESIGN.md §8.3). /rewards and /timekeeper are fixtures until MVP-2.
+// Owner: B. Agent routes (DESIGN.md §8.3). /rewards is a fixture until MVP-2.
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { bodyLimit } from "hono/body-limit";
-import * as fx from "@alfred/shared/fixtures";
 import { ChatRequest } from "@alfred/shared";
 import { z } from "zod";
 import { Cents } from "@alfred/shared";
 import { getVerdict, hasDb, listVerdicts } from "../agents/data";
 import { createWatch, listWatches, startWatcher } from "../agents/watcher";
 import { handleUserMessage, MAX_IMAGE_BYTES } from "../agents/orchestrator";
+import { timekeeper } from "../agents/timekeeper";
 import { env } from "../env";
 
 export const agents = new Hono();
@@ -64,4 +64,7 @@ agents.post("/wishlist", async (c) => {
 });
 agents.get("/rewards", (c) => c.json([]));
 agents.post("/rewards/:programId/enroll", (c) => c.json({ todo: "B: simulated enroll" }, 501));
-agents.get("/timekeeper", (c) => c.json(fx.timekeeperVerdict));
+// Upgrade now vs wait, for the user's phone. ?productId= picks the upgrade target; ?refresh=1 skips the 6h reuse.
+agents.get("/timekeeper", async (c) =>
+  c.json(await timekeeper({ userId: env.DEMO_USER_ID, productId: c.req.query("productId") || undefined, refresh: c.req.query("refresh") === "1" })),
+);

@@ -1,7 +1,7 @@
 // Owner: B. Read-side data access for the agents. Every agent reads seed data through these functions only.
 import * as fx from "@alfred/shared/fixtures";
 import { collections } from "@alfred/shared/db";
-import type { Category, Offer, Product, User, Verdict } from "@alfred/shared";
+import type { Category, Device, Offer, Product, TradeInCurve, User, Verdict } from "@alfred/shared";
 import { env } from "../env";
 import { withTimeout } from "../deal/timeout";
 
@@ -238,6 +238,30 @@ function fallbackHistory(productId: string, now: Date) {
     const dip = weekend && Math.floor((ts - 4 * DAY) / (7 * DAY)) % 4 === 0; // one weekend sale every 4 weeks
     return { ts, priceCents: dip ? 149_00 : 179_00 + ((i * 37) % 3) * 5_00 };
   });
+}
+
+// ---------- devices & trade-in (Timekeeper) ----------
+
+// Mirror the seed's hero device so Timekeeper's mock path tells the same "wait 4 months" story.
+const FALLBACK_DEVICE: Omit<Device, "userId"> = {
+  _id: "dev_maya", model: "iPhone 15", purchasedAt: new Date("2025-02-16T00:00:00Z"), financingRemainingCents: 210_00, batteryHealthPct: 88, storageUsedPct: 71,
+};
+const FALLBACK_CURVE: TradeInCurve = {
+  _id: "tic_iphone_15", model: "iPhone 15",
+  points: [310, 300, 290, 280, 270, 210, 200, 190, 180, 170, 160, 150, 140].map((d, month) => ({ month, valueCents: d * 100 })),
+};
+
+export async function getDevice(userId: string): Promise<Device | undefined> {
+  const d = await fromSeed((c) => c.devices.findOne({ userId }));
+  if (d !== undefined) return d ?? undefined;
+  return userId === "u_maya" ? { ...FALLBACK_DEVICE, userId } : undefined;
+}
+
+/** Trade-in value by month from now (month 0 = today). */
+export async function getTradeInCurve(model: string): Promise<TradeInCurve | undefined> {
+  const t = await fromSeed((c) => c.tradeinCurves.findOne({ model }));
+  if (t !== undefined) return t ?? undefined;
+  return model === FALLBACK_CURVE.model ? FALLBACK_CURVE : undefined;
 }
 
 // ---------- past purchases (duplicate-ownership check) ----------

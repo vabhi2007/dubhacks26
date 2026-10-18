@@ -15,6 +15,7 @@ import { getOffers, getProduct, hasDb, searchProducts, spendByCategory } from ".
 import { usd } from "./format";
 import { createWatch, listWatches } from "./watcher";
 import { worthIt } from "./worthIt";
+import { timekeeper } from "./timekeeper";
 
 export type UserMessage = {
   userId: string;
@@ -200,6 +201,17 @@ function tools(ctx: Ctx) {
         ctx.turn.actions.push(`${p.title}: ${({ buy: "Buy", wait: "Wait", skip: "Skip" })[v.kind]} — ${v.headline}`);
         if (v.math.bestOfferId) remember(userId, `${p.title} = ${p._id} (best offer ${v.math.bestOfferId})`);
         return json({ verdictId: v._id, verdict: v.kind, headline: v.headline, reasons: v.reasons, bestOfferId: v.math.bestOfferId, price: usd(v.math.priceCents), expectedDrop: usd(v.math.expectedDropCents ?? 0) });
+      },
+    }),
+    betaZodTool({
+      name: "timekeeper",
+      description: "T-Mobile upgrade advice for the user's current phone: upgrade now or wait N months, from trade-in value, financing still owed, and battery/storage health. Optionally name the phone to upgrade to.",
+      inputSchema: z.object({ productId: z.string().optional().describe("Upgrade target from find_product; omit for the current model in the same family") }),
+      run: async ({ productId }) => {
+        const v = await timekeeper({ userId, productId, surface });
+        ctx.turn.verdictId = v._id;
+        ctx.turn.actions.push(`Phone upgrade: ${v.headline}`);
+        return json({ verdictId: v._id, decision: v.kind === "buy" ? "upgrade now" : `wait ${v.timekeeper?.waitMonths} months`, headline: v.headline, reasons: v.reasons, outOfPocketNow: usd(v.timekeeper?.costNowCents ?? 0), outOfPocketLater: usd(v.timekeeper?.costLaterCents ?? 0) });
       },
     }),
     betaZodTool({

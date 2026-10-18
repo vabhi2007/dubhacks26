@@ -3,13 +3,13 @@
 import { z } from "zod";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { Category, fmtUSD, type Offer, type Product, type Surface, type Verdict } from "@alfred/shared";
-import { collections, newId } from "@alfred/shared/db";
-import { emit } from "../core/events";
+import { newId } from "@alfred/shared/db";
 import { anthropic } from "./client";
 import { usd } from "./format";
+import { publishVerdict } from "./verdicts";
 import { env } from "../env";
 import {
-  bestOffer, getOffers, getProduct, getUser, hasDb, MIN_DIPS, monthToDateSpend, priceStats, recentPurchases, rememberVerdict, spendByCategory,
+  bestOffer, getOffers, getProduct, getUser, MIN_DIPS, monthToDateSpend, priceStats, recentPurchases, spendByCategory,
   type CategorySpend, type PastPurchase,
 } from "./data";
 
@@ -128,28 +128,8 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
     createdAt: now,
   };
 
-  rememberVerdict(verdict);
-  // Persist in the background: the verdict is already paid for, and a slow or unreachable Atlas
-  // must neither fail nor delay it. rememberVerdict keeps /verdicts/:id working meanwhile.
-  if (hasDb()) void persist(verdict, surface);
+  publishVerdict(verdict, surface, "worth_it");
   return verdict;
-}
-
-async function persist(verdict: Verdict, surface: Surface) {
-  try {
-    const c = await collections();
-    await c.verdicts.insertOne(verdict);
-    await emit({
-      userId: verdict.userId,
-      agent: "worth_it",
-      surface,
-      type: "verdict",
-      summary: `${label(verdict.kind)} — ${verdict.headline}`,
-      refs: { productId: verdict.productId, verdictId: verdict._id },
-    });
-  } catch (e) {
-    console.warn("[worth_it] failed to persist verdict/event:", (e as Error).message);
-  }
 }
 
 /**
@@ -235,5 +215,4 @@ function ruleBasedJudgment(a: {
   return { kind, headline, reasons: reasons.slice(0, 4).length ? reasons.slice(0, 4) : [headline], replacesCategory: related ? cat : null };
 }
 
-const label = (k: Verdict["kind"]) => ({ buy: "Buy", wait: "Wait", skip: "Skip" })[k];
 const round = (n: number, dp: number) => Math.round(n * 10 ** dp) / 10 ** dp;
