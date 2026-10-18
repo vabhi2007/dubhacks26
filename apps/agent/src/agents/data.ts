@@ -55,6 +55,38 @@ export async function getProducts(ids: string[]): Promise<Product[]> {
   return [...ps, ...(ids.includes(fx.product._id) && !found.has(fx.product._id) ? [fx.product] : [])];
 }
 
+// Filler words in chat ("is the X worth it for me?") that would otherwise count against a match.
+const STOPWORDS = new Set(
+  ("a an and any are be buy can cost could do does for from get good hey hi how i im is it its me much my need of on or " +
+   "price really should show tell than that the this to want was what whats will with worth would you your").split(" "),
+);
+const words = (s: string) => s.toLowerCase().replace(/['’]/g, "").match(/[a-z0-9]+/g) ?? [];
+
+/**
+ * Catalog text search for chat ("is the Bambino worth it for me?"). Ranked by how many query words start a word in the
+ * title/brand/model/key, then by shorter titles (so "Bambino" beats "Bambino Plus"). `strict` (offline fallback) only
+ * returns a product that matches at least half the query words.
+ */
+export async function searchProducts(query: string, limit = 5, opts: { strict?: boolean } = {}): Promise<Product[]> {
+  const q = [...new Set(words(query).filter((w) => w.length > 1 && !STOPWORDS.has(w)))];
+  if (!q.length) return [];
+  // Alphanumeric words only, so they're safe inside a regex.
+  const rows = await fromSeed((c) =>
+    c.products
+      .find({ $or: q.flatMap((w) => ["title", "brand", "model", "canonicalKey"].map((f) => ({ [f]: { $regex: `\\b${w}`, $options: "i" } }))) }, { projection: { embedding: 0 } })
+      .limit(200)
+      .toArray(),
+  );
+  const ranked = (rows ?? [fx.product])
+    .map((p) => {
+      const toks = words(`${p.title} ${p.brand} ${p.model} ${p.canonicalKey.replace(/-/g, " ")}`);
+      return { p, hits: q.filter((w) => toks.some((t) => t.startsWith(w))).length, len: words(p.title).length };
+    })
+    .filter((r) => r.hits > 0 && (!opts.strict || r.hits >= Math.ceil(q.length / 2)))
+    .sort((a, b) => b.hits - a.hits || a.len - b.len);
+  return ranked.slice(0, limit).map((r) => r.p);
+}
+
 export async function getOffers(productId: string): Promise<Offer[]> {
   const o = await fromSeed((c) => c.offers.find({ productId }).toArray());
   if (o?.length) return o;
