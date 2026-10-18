@@ -126,3 +126,17 @@ export const createWatch = (productId: string, targetPriceCents: number) =>
     method: "POST",
     body: JSON.stringify({ productId, targetPriceCents, surface: "web" }),
   });
+
+// GET /timekeeper — upgrade now vs wait N months for the user's phone (B, #49). The agent reuses a
+// verdict from the last 6h; `refresh` asks it to re-check. Fixture verdict when offline.
+export const getTimekeeper = (refresh = false) =>
+  withFallback<Verdict>(() => api(`/timekeeper${refresh ? "?refresh=1" : ""}`), fx.timekeeperVerdict);
+
+// GET /products/:id (A, #67) returns { product, … }; we only need its display info. Null when unknown/offline.
+export async function getProductInfo(id: string): Promise<{ title?: string; imageUrl?: string } | null> {
+  try {
+    return (await api<{ product: { title?: string; imageUrl?: string } }>(`/products/${id}`)).product;
+  } catch {
+    return null;
+  }
+}
