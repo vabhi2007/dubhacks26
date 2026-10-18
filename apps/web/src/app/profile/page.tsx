@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { fmtUSD } from "@alfred/shared";
 import { MoneyStat, useCountUp } from "@alfred/ui";
-import { CategoryBars, categoryLabel, fullMonthAverage, MonthlyTrendChart } from "../../components/SpendingCharts";
+import { CategoryDonut, categoryLabel, fullMonthAverage, MonthlyTrendChart } from "../../components/SpendingCharts";
 import { getProfile, type SpendProfile } from "../../lib/api";
 
 function SectionCard({ label, aside, children }: { label: string; aside?: React.ReactNode; children: React.ReactNode }) {
@@ -90,7 +90,7 @@ export default function Spending() {
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1.15fr]">
         <SectionCard label="By category">
-          <CategoryBars categories={profile.byCategory} totalCents={profile.totals12moCents} />
+          <CategoryDonut categories={profile.byCategory} totalCents={profile.totals12moCents} />
         </SectionCard>
 
         <SectionCard
