@@ -36,11 +36,14 @@ export function MandateCard({
   mandate,
   busy,
   onRevoke,
+  preview,
   className,
 }: {
   mandate: Mandate;
   busy?: boolean;
   onRevoke?: () => void;
+  /** Live preview (e.g. while issuing a new mandate): no actions under the card. */
+  preview?: boolean;
   className?: string;
 }) {
   const { label, agent, capCents, spentCents, expiresAt, status, card } = mandate;
@@ -95,7 +98,7 @@ export function MandateCard({
         ) : null}
       </div>
 
-      {active ? (
+      {active && !preview ? (
         <button
           type="button"
           onClick={onRevoke}

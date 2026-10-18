@@ -313,3 +313,22 @@ const fixtureProfile = (): SpendProfile => {
 };
 
 export const getProfile = () => withFallback<SpendProfile>(() => api("/profile"), fixtureProfile());
+
+// POST /mandates — issue a new scoped virtual card (A). The agent picks last4 + token.
+export type NewMandate = { label: string; agent: "watcher" | "orchestrator" | "smart_pay"; capCents: number; categories: Category[]; days: number };
+export const createMandate = (body: NewMandate) => api<Mandate>("/mandates", { method: "POST", body: JSON.stringify(body) });
+
+/** A readable message from an agent error body ({ error } JSON, possibly a Zod issue list). */
+export function agentErrorMessage(e: ApiError, offline: string): string {
+  if (e.status == null) return offline;
+  try {
+    const msg = (JSON.parse(e.body ?? "") as { error?: string }).error ?? "";
+    try {
+      const issues = JSON.parse(msg) as { path?: (string | number)[]; message?: string }[];
+      if (Array.isArray(issues) && issues[0]) return `${issues[0].path?.join(".") || "input"}: ${issues[0].message}`;
+    } catch {}
+    return msg || `Failed (${e.status})`;
+  } catch {
+    return e.body || `Failed (${e.status})`;
+  }
+}

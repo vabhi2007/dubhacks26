@@ -1,7 +1,7 @@
 // Owner: A. The ONLY way money moves (DESIGN.md §8.2). Guardrails live here in code, never in prompts.
 // Mandates are scoped per user and per agent (DESIGN.md F3): an agent can only spend a mandate issued to it.
-import { collections, type ClientSession } from "@alfred/shared/db";
-import type { AgentName, Category, Mandate } from "@alfred/shared";
+import { collections, newId, type ClientSession } from "@alfred/shared/db";
+import type { AgentName, Category, Mandate, MandateCreate } from "@alfred/shared";
 import { HTTPException } from "hono/http-exception";
 import { emit } from "./events";
 import { requireId, usd } from "./util";
@@ -70,6 +70,45 @@ export async function revokeMandate(id: string, userId: string): Promise<Mandate
   await emit({
     userId: m.userId, agent: m.agent, surface: "web", type: "message",
     summary: `Revoked “${m.label}” — ${m.agent} can no longer spend on Visa ••${m.card.last4}${modifiedCount ? ` (cancelled ${modifiedCount} pending approval${modifiedCount > 1 ? "s" : ""})` : ""}`,
+    refs: { mandateId: m._id },
+  });
+  return m;
+}
+
+const DAY = 86_400_000;
+const AGENT_NAME: Partial<Record<AgentName, string>> = { watcher: "the Watcher", orchestrator: "Alfred", smart_pay: "Smart Pay" };
+
+/** A fresh mock virtual Visa for one mandate: last4 unique among the user's mandates, opaque token. */
+async function issueVirtualCard(userId: string): Promise<Mandate["card"]> {
+  const c = await collections();
+  const taken = new Set((await c.mandates.find({ userId }, { projection: { "card.last4": 1 } }).toArray()).map((m) => m.card.last4));
+  let last4 = "";
+  for (let i = 0; i < 50 && (!last4 || taken.has(last4)); i++) last4 = String(1000 + Math.floor(Math.random() * 9000));
+  return { last4, token: `tok_mock_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}` };
+}
+
+/** Issue a new scoped mandate (DESIGN.md F3). Spending still goes only through authorize(); the confirm-above threshold still applies. */
+export async function createMandate(userId: string, input: MandateCreate): Promise<Mandate> {
+  const c = await collections();
+  const label = input.label.trim();
+  if (await c.mandates.findOne({ userId, status: "active", label })) throw new HTTPException(409, { message: `an active mandate named “${label}” already exists` });
+  const m: Mandate = {
+    _id: newId("mnd"),
+    userId,
+    agent: input.agent,
+    label,
+    capCents: input.capCents,
+    spentCents: 0,
+    categories: [...new Set(input.categories)],
+    merchants: [...new Set(input.merchants)],
+    expiresAt: new Date(Date.now() + input.days * DAY),
+    status: "active",
+    card: await issueVirtualCard(userId),
+  };
+  await c.mandates.insertOne(m);
+  await emit({
+    userId, agent: m.agent, surface: "web", type: "message",
+    summary: `New mandate “${m.label}” — ${AGENT_NAME[m.agent] ?? m.agent} can spend up to ${usd(m.capCents)} on ${m.categories.join(", ")} for ${input.days} days on Visa ••${m.card.last4}`,
     refs: { mandateId: m._id },
   });
   return m;
