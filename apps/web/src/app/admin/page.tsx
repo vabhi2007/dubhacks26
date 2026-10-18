@@ -4,7 +4,7 @@
 // during the demo (CONTRIBUTING "Shared database"). This is the UI; D does not run them.
 import { useState } from "react";
 import { toast } from "sonner";
-import { adminPriceDrop, adminReset, type ApiError } from "../../lib/api";
+import { adminAdvanceTime, adminPriceDrop, adminReset, type ApiError } from "../../lib/api";
 
 type Drop = { productId: string; label: string; newPriceCents: number };
 
@@ -64,6 +64,20 @@ export default function Admin() {
     }
   }
 
+  async function advance(days: number) {
+    if (anyBusy) return;
+    setBusy(`+${days}d`);
+    try {
+      const r = await adminAdvanceTime(days);
+      const expired = r.counts.approvalsExpired ?? 0;
+      toast.success(`Fast-forwarded ${days} day${days === 1 ? "" : "s"}${expired ? ` · ${expired} approval${expired === 1 ? "" : "s"} expired` : ""}`);
+    } catch (e) {
+      toast.error(errorMessage(e as ApiError, "Agent offline — time not advanced"));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function reset() {
     if (anyBusy) return;
     if (!confirm("Reset the demo persona? This writes to the shared Atlas db.")) return;
@@ -94,6 +108,20 @@ export default function Admin() {
         </div>
         <p className="mt-2 text-xs text-text-muted">
           Drops the hero product price → Watcher creates an approval → approve on Home.
+        </p>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-muted">Time</h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[1, 7, 30].map((d) => (
+            <BigButton key={d} onClick={() => advance(d)} busy={anyBusy} variant="accent">
+              +{d} day{d === 1 ? "" : "s"}
+            </BigButton>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-text-muted">
+          Ages every timestamp: pending approvals expire, mandates near expiry, the phone ages and pays down financing (Timekeeper changes). Reset to undo.
         </p>
       </section>
 

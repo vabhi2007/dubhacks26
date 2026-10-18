@@ -17,7 +17,7 @@ You are building **Alfred** with a team of 4 at DubHacks '26. You own **Workstre
 - `pnpm dev` boots (agent :8787, web :3100, extension WXT :3110). Stop it when done checking.
 
 ## Your scope
-**You may edit:** `packages/shared/` (contracts via contracts PRs only), `scripts/`, `apps/agent/src/core/`, `apps/agent/src/messenger/`, `apps/agent/src/routes/core.ts`, `apps/agent/src/index.ts` (route wiring), `.env.example`, Atlas setup, VEYZL setup.
+**You may edit:** `packages/shared/` (contracts via contracts PRs only), `scripts/`, `apps/agent/src/core/`, `apps/agent/src/messenger/`, `apps/agent/src/routes/core.ts`, `apps/agent/src/index.ts` (route wiring), `.env.example`, Atlas setup.
 **Do not edit:** anything else. Consume other workstreams only through `@alfred/shared` types, fixtures, and the HTTP routes in DESIGN.md §8.3. If a teammate's piece isn't ready, use its mock/fixture and keep going.
 **Contracts:** if you truly need a change to `packages/shared/src/schemas.ts` / `interfaces.ts`, stop and tell me first; it goes in its own `contracts/<change>` branch + PR, separate from feature work.
 
@@ -37,7 +37,6 @@ You unblock everyone: ship a **minimal** seed fast, then grow it.
 
 **MVP-2 / MVP-3**
 8. `/profile` aggregations (spend by category/month, recurring merchants), `/mandates` create, `/admin/advance-time`.
-9. **VEYZL** — confirm the audit runs on PRs; capture one real finding on purchase/guardrail code → fix → passing check (screenshots).
 10. *Stretch:* Photon Voice outbound approval call (DESIGN.md S1).
 
 ## How to work

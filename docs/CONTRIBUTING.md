@@ -23,7 +23,6 @@ Four people + four coding agents on one repo for ~24h. These rules keep `main` a
 - PR description: what changed, how to test (exact commands / clicks), screenshots for UI, and any contract impact.
 - Merge when typecheck passes and the golden path still works. **Squash merge.** Contract PRs need a thumbs-up from every owner in the group chat.
 - Merge at least every ~2 hours so others integrate against real code, not fixtures.
-- VEYZL runs on PRs — read its findings; Workstream A records one real before/after for the VEYZL track.
 
 ## Shared database
 - Everyone uses the same Atlas cluster and `alfred` db (M0 search-index limits rule out one db per person).

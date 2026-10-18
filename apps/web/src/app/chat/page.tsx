@@ -12,6 +12,7 @@ import { VerdictCard, enterUp, fade } from "@alfred/ui";
 import { type ApiError, type VerdictView, type WatchView, createWatch, getVerdict, getWishlist } from "../../lib/api";
 import { type ChatMsg, addTurnStep, clearChat, sendChat, stopChat, useChatThread } from "../../lib/chat";
 import { useAgentEvent } from "../../lib/useEvents";
+import { VerdictGraphs } from "../../components/VerdictGraphs";
 
 const STICK_PX = 80; // within this of the bottom, new text keeps the thread scrolled down
 
@@ -157,7 +158,12 @@ export default function Chat() {
               <VerdictSkeleton />
             ) : v ? (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={fade}>
-                <VerdictCard verdict={v} product={{ title: v.product?.title ?? "", imageUrl: v.product?.imageUrl }} actions={verdictCta(v)} />
+                <VerdictCard
+                  verdict={v}
+                  product={{ title: v.product?.title ?? "", imageUrl: v.product?.imageUrl }}
+                  actions={verdictCta(v)}
+                  details={<VerdictGraphs verdict={v} />}
+                />
               </motion.div>
             ) : null
           ) : null}

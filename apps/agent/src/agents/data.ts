@@ -192,6 +192,8 @@ export type PriceStats = {
   typicalLowCents: number;
   /** How many calendar weeks (Mon–Sun) dipped ≥5% below `refCents`. */
   dipsBelowRef: number;
+  /** Days until the next likely sale, from the average gap between sale starts (≥ MIN_DIPS sales). */
+  nextSaleInDays?: number;
 };
 
 /** Dipped weeks needed before a drop counts as expected. */
@@ -231,7 +233,29 @@ export async function priceStats(productId: string, refCents: number, sellers: s
     // One sale week is an anomaly, not a pattern to wait for.
     typicalLowCents: dips.length >= MIN_DIPS ? median(dips) : lows[Math.floor(lows.length / 4)]!,
     dipsBelowRef: dips.length,
+    ...nextSale(series, refCents, now),
   };
+}
+
+/**
+ * When the next sale is likely: sale episodes are runs of days ≥ 5% below `refCents` (a gap of more than 2 days starts a
+ * new one). With ≥ MIN_DIPS episodes, the cadence is the average gap between their starts; the next sale is one cadence
+ * after the last start (rolled forward if that's already past).
+ */
+function nextSale(series: { ts: number; priceCents: number }[], refCents: number, now: Date): { nextSaleInDays?: number } {
+  const starts: number[] = [];
+  let lastDip = -Infinity;
+  for (const p of series) {
+    if (p.priceCents > refCents * 0.95) continue;
+    if (p.ts - lastDip > 2 * DAY) starts.push(p.ts);
+    lastDip = p.ts;
+  }
+  if (starts.length < MIN_DIPS) return {};
+  const cadence = (starts.at(-1)! - starts[0]!) / (starts.length - 1);
+  if (cadence < DAY) return {};
+  const since = now.getTime() - starts.at(-1)!;
+  const until = cadence - (since % cadence); // next start at or after now
+  return { nextSaleInDays: Math.max(1, Math.round(until / DAY)) };
 }
 
 // Synthetic 90-day series for the hero product only: ~$179 with weekend dips to ~$149.

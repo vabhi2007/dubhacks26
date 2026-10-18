@@ -103,6 +103,9 @@ export const adminPriceDrop = (body: { productId: string; newPriceCents: number 
 
 export const adminReset = () => api("/admin/reset", { method: "POST" });
 
+export const adminAdvanceTime = (days: number) =>
+  api<{ ok: true; days: number; counts: Record<string, number> }>("/admin/advance-time", { method: "POST", body: JSON.stringify({ days }) });
+
 // GET /wishlist joins each watch with its product + current best offer (WatchView on the agent).
 export type WatchView = WishlistItem & {
   product?: { title?: string; imageUrl?: string };
