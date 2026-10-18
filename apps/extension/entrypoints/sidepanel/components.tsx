@@ -1,8 +1,8 @@
 // Owner: C. Side-panel components on @alfred/ui tokens (DESIGN.md §6): square corners, DM Serif titles, Inter Tight
 // money (.num), gold-gradient primary action, charts over lists. Kept compact: reasons cap at 2 lines.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { fmtUSD, watchTarget, type Offer, type Product, type Verdict } from "@alfred/shared";
-import { cn, VerdictBadge } from "@alfred/ui";
+import { fmtUSD, watchTarget, type AgentEvent, type Offer, type Product, type Verdict } from "@alfred/shared";
+import { cn, FeedItem, VerdictBadge } from "@alfred/ui";
 import { dailyLows, sparkline, stripLayout, type DayLow } from "./charts";
 import { statusFromItem, type WatchStatus } from "./watchStatus";
 
@@ -260,6 +260,21 @@ export function WatchButton({ agentUrl, product, verdict, status, onStatus }: {
       ) : null}
       {state.kind === "error" && <p role="alert" className="text-xs text-skip">{state.message}</p>}
     </div>
+  );
+}
+
+/** What Alfred has been doing, live (D's FeedItem, same as the dashboard feed). */
+export function ActivityFeed({ events }: { events: AgentEvent[] }) {
+  if (!events.length) return null;
+  return (
+    <section>
+      <h2 className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">Recent activity</h2>
+      <ul className="divide-y divide-border rounded-card border border-border bg-surface px-4">
+        {events.map((e) => (
+          <FeedItem key={e._id} event={e} className="fade-in" />
+        ))}
+      </ul>
+    </section>
   );
 }
 

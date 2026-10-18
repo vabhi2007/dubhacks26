@@ -1,7 +1,8 @@
-// Owner: C. Live watch status for the product on screen (#38): GET /wishlist once, then the agent's /events stream, so
+// Owner: C. Live watch status for the product on screen (#38): GET /wishlist once, then the panel's /events stream, so
 // the panel follows Watch → price drop → approval → purchase instead of saying "Watching" forever.
 import { useEffect, useState } from "react";
 import type { AgentEvent, WishlistItem } from "@alfred/shared";
+import type { EventListener } from "./agentEvents";
 
 export type WatchStatus = { kind: "watching" | "approval" | "bought"; note?: string };
 
@@ -27,7 +28,8 @@ export function nextStatus(e: AgentEvent, prev: WatchStatus | null): WatchStatus
   }
 }
 
-export function useWatchStatus(agentUrl: string, productId: string | undefined) {
+/** `subscribe` is the panel's shared /events stream (agentEvents.ts); only live events move the status. */
+export function useWatchStatus(agentUrl: string, productId: string | undefined, subscribe: (l: EventListener) => () => void) {
   const [status, setStatus] = useState<WatchStatus | null>(null);
 
   useEffect(() => {
@@ -44,18 +46,9 @@ export function useWatchStatus(agentUrl: string, productId: string | undefined) 
       })
       .catch(() => {});
 
-    // Live from here on (replay=0); EventSource reconnects with Last-Event-ID, so dedupe by event id.
-    const seen = new Set<string>();
-    const es = new EventSource(`${agentUrl}/events?replay=0`);
-    es.addEventListener("agent_event", (m) => {
-      let e: AgentEvent;
-      try {
-        e = JSON.parse((m as MessageEvent<string>).data);
-      } catch {
-        return;
-      }
-      if (!active || seen.has(e._id) || e.refs?.productId !== productId) return;
-      seen.add(e._id);
+    // From here on, live events for this product; replayed history is already reflected in /wishlist.
+    const off = subscribe((e, live) => {
+      if (!active || !live || e.refs?.productId !== productId) return;
       setStatus((prev) => {
         const s = nextStatus(e, prev);
         return s === undefined ? prev : s;
@@ -63,9 +56,9 @@ export function useWatchStatus(agentUrl: string, productId: string | undefined) 
     });
     return () => {
       active = false;
-      es.close();
+      off();
     };
-  }, [agentUrl, productId]);
+  }, [agentUrl, productId, subscribe]);
 
   return { status, setStatus };
 }

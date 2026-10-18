@@ -2,7 +2,7 @@
 // selection comes back here, we capture the visible tab, and the panel crops to it. Pages the extension can't script
 // (chrome://, the Web Store) fall back to capturing the whole tab.
 import type { Selection } from "../lib/selection";
-import type { OverlayMessage } from "./overlay";
+import type { CapturedMessage, OverlayMessage } from "./overlay";
 
 export type PendingSnap = { dataUrl: string; pageUrl?: string; at: number; selection?: Selection };
 
@@ -20,7 +20,12 @@ export default defineBackground(() => {
   });
 
   browser.runtime.onMessage.addListener((msg: OverlayMessage, sender) => {
-    if (msg?.type === "alfred:selection" && sender.tab?.windowId) void capture(sender.tab.windowId, sender.tab.url, msg.selection);
+    const tab = sender.tab;
+    if (msg?.type === "alfred:selection" && tab?.windowId)
+      void capture(tab.windowId, tab.url, msg.selection).finally(() => {
+        // Let the page restore anything it hid for the screenshot (e.g. YouTube's player controls).
+        if (tab.id) browser.tabs.sendMessage(tab.id, { type: "alfred:captured" } satisfies CapturedMessage).catch(() => {});
+      });
     // "alfred:cancel": nothing was captured; the panel keeps showing whatever it had.
   });
 });
