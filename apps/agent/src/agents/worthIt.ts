@@ -6,7 +6,11 @@ import { Category, fmtUSD, type Offer, type Product, type Surface, type Verdict 
 import { collections, newId } from "@alfred/shared/db";
 import { emit } from "../core/events";
 import { anthropic } from "./client";
-import { bestOffer, getOffers, getProduct, getUser, hasDb, monthToDateSpend, priceStats, spendByCategory } from "./data";
+import { env } from "../env";
+import {
+  bestOffer, getOffers, getProduct, getUser, hasDb, monthToDateSpend, priceStats, recentPurchases, spendByCategory,
+  type CategorySpend, type PastPurchase,
+} from "./data";
 
 export type WorthItInput = {
   userId: string;
@@ -32,6 +36,7 @@ Rules:
 - "buy": good value now (price at or near its typical low, fits budget, or clearly pays for itself).
 - "wait": worth buying, but history shows a likely drop soon (expectedDrop > 0 with repeated dips) — say how much and roughly how often.
 - "skip": poor value for this user — no matching habit, blows the budget, or duplicates what they already spend on. Say Skip when it's true; don't be a salesperson.
+- If alreadyBoughtInCategory12mo shows the same or an overlapping product, lean Skip and say what they already own.
 - Payback: only claim the product "pays for itself" if it genuinely replaces spending in replacesCategory. Use the precomputed paybackMonths for that category from FACTS.
 - Headline ≤ 90 chars. Reasons: 2–4 bullets, each with a number. No filler like "it depends" or "consider your needs".`;
 
@@ -45,11 +50,12 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
   const best = bestOffer(offers);
   if (!best) throw new Error(`worthIt: no offers for ${productId}`);
 
-  const [user, spend, mtd, history] = await Promise.all([
+  const [user, spend, mtd, history, owned] = await Promise.all([
     getUser(userId),
     spendByCategory(userId, now),
     monthToDateSpend(userId, product.category, now),
     priceStats(productId, best.priceCents, now),
+    recentPurchases(userId, product.category, now),
   ]);
 
   const price = best.priceCents;
@@ -87,20 +93,13 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
       topMerchants: s.topMerchants.map((m) => `${m.name} ${fmtUSD(m.totalCents)}`),
       paybackMonthsIfReplaced: paybackByCategory[s.category],
     })),
+    alreadyBoughtInCategory12mo: owned.map((o) => ({ title: o.title, price: fmtUSD(o.amountCents), sameProduct: o.productId === productId })),
   };
 
-  const res = await anthropic.beta.messages.parse({
-    model: "claude-opus-5-5",
-    max_tokens: 16000,
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
-    output_config: { effort: "medium", format: betaZodOutputFormat(Judgment) },
-    system: SYSTEM,
-    messages: [{ role: "user", content: `FACTS:\n${JSON.stringify(facts, null, 2)}\n\nGive your verdict.` }],
+  const j = await judge(facts).catch((e) => {
+    console.warn("[worth_it] Claude unavailable, using rule-based verdict:", (e as Error).message);
+    return ruleBasedJudgment({ product, price, expectedDropCents, budgetImpactPct, spend, paybackByCategory, owned, productId });
   });
-  if (res.stop_reason === "refusal") throw new Error("worthIt: model declined");
-  const j = res.parsed_output;
-  if (!j) throw new Error(`worthIt: unparseable output (stop_reason=${res.stop_reason})`);
 
   const related = j.replacesCategory ? spend.find((s) => s.category === j.replacesCategory) : undefined;
   const reasons = j.reasons.filter(Boolean).slice(0, 4);
@@ -137,5 +136,63 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
   return verdict;
 }
 
+async function judge(facts: object): Promise<z.infer<typeof Judgment>> {
+  if (!env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set");
+  const res = await anthropic.beta.messages.parse({
+    model: "claude-opus-5-5",
+    max_tokens: 16000,
+    betas: ["server-side-fallback-2026-07-01"],
+    fallbacks: "default",
+    output_config: { effort: "medium", format: betaZodOutputFormat(Judgment) },
+    system: SYSTEM,
+    messages: [{ role: "user", content: `FACTS:\n${JSON.stringify(facts, null, 2)}\n\nGive your verdict.` }],
+  });
+  if (res.stop_reason === "refusal") throw new Error("model declined");
+  if (!res.parsed_output) throw new Error(`unparseable output (stop_reason=${res.stop_reason})`);
+  return res.parsed_output;
+}
+
+// Keyword → spend category it substitutes. Only used when Claude is unavailable.
+const SUBSTITUTES: [RegExp, Category][] = [
+  [/espresso|coffee|nespresso|keurig|grinder/i, "coffee"],
+  [/air fryer|instant pot|blender|cookware|rice cooker/i, "dining"],
+  [/bike|scooter/i, "transport"],
+];
+
+/** Deterministic verdict so the mock path works with no API key (and survives API outages). */
+function ruleBasedJudgment(a: {
+  product: Product; productId: string; price: number; expectedDropCents: number; budgetImpactPct?: number;
+  spend: CategorySpend[]; paybackByCategory: Record<string, number>; owned: PastPurchase[];
+}): z.infer<typeof Judgment> {
+  const cat = SUBSTITUTES.find(([re]) => re.test(a.product.title))?.[1] ?? null;
+  const related = cat ? a.spend.find((s) => s.category === cat) : undefined;
+  const payback = related ? a.paybackByCategory[related.category] : undefined;
+  const dup = a.owned.find((o) => o.productId === a.productId) ?? a.owned[0];
+  const reasons: string[] = [];
+  if (related && payback !== undefined)
+    reasons.push(`You spent ${usd(related.totalCents)} on ${cat} in 12 months — pays back in ~${payback} months.`);
+  if (a.expectedDropCents > 0) reasons.push(`Price has dipped ~${usd(a.expectedDropCents)} below ${usd(a.price)} recently.`);
+  if (a.budgetImpactPct !== undefined) reasons.push(`${usd(a.price)} is ${Math.round(a.budgetImpactPct * 100)}% of your monthly ${a.product.category} budget.`);
+  if (dup) reasons.push(`You bought ${dup.title} for ${usd(dup.amountCents)} in the last year.`);
+
+  let kind: "buy" | "wait" | "skip";
+  let headline: string;
+  if (dup?.productId === a.productId || (!related && (a.budgetImpactPct ?? 0) > 1)) {
+    kind = "skip";
+    headline = dup?.productId === a.productId ? `Skip — you already bought this ${dup.title}.` : `Skip — ${usd(a.price)} with no habit it replaces.`;
+  } else if (a.expectedDropCents >= a.price * 0.05) {
+    kind = "wait";
+    headline = `Wait — it usually dips ~${usd(a.expectedDropCents)} below today's price.`;
+  } else if (payback !== undefined && payback <= 12) {
+    kind = "buy";
+    headline = `Buy — pays for itself in ~${payback} months from your ${cat} spend.`;
+  } else {
+    kind = "skip";
+    headline = `Skip — ${usd(a.price)} doesn't pay back from your spending.`;
+  }
+  return { kind, headline, reasons: reasons.slice(0, 4).length ? reasons.slice(0, 4) : [headline], replacesCategory: related ? cat : null };
+}
+
+const usd = (cents: number) => `$${Math.round(cents / 100).toLocaleString("en-US")}`;
 const label = (k: Verdict["kind"]) => ({ buy: "Buy", wait: "Wait", skip: "Skip" })[k];
 const round = (n: number, dp: number) => Math.round(n * 10 ** dp) / 10 ** dp;

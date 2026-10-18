@@ -1,4 +1,4 @@
-// Owner: B. Read-side data access for the agents. Mongo first; falls back to fixtures until A's seed is on main.
+// Owner: B. Read-side data access for the agents. Every agent reads seed data through these functions only.
 import * as fx from "@alfred/shared/fixtures";
 import { collections } from "@alfred/shared/db";
 import type { Category, Offer, Product, User, Verdict } from "@alfred/shared";
@@ -6,9 +6,19 @@ import { env } from "../env";
 
 const DAY = 86_400_000;
 
+// Where seed data (products, offers, users, transactions, price history) comes from.
+// Flip to "mongo" once A's seed is on main; fixtures remain the fallback for anything Mongo lacks.
+const SEED_SOURCE = "fixtures" as "fixtures" | "mongo";
+
 export const hasDb = () => Boolean(env.MONGODB_URI);
 
-async function tryDb<T>(fn: (c: Awaited<ReturnType<typeof collections>>) => Promise<T>): Promise<T | undefined> {
+type Cols = Awaited<ReturnType<typeof collections>>;
+
+/** Seed-data read: Mongo only when SEED_SOURCE is "mongo"; undefined → caller uses fixtures. */
+const fromSeed = <T>(fn: (c: Cols) => Promise<T>) => (SEED_SOURCE === "mongo" ? tryDb(fn) : Promise.resolve(undefined));
+
+/** Read of data the agents write themselves (verdicts, wishlist) — always Mongo when configured. */
+async function tryDb<T>(fn: (c: Cols) => Promise<T>): Promise<T | undefined> {
   if (!hasDb()) return undefined;
   try {
     return await fn(await collections());
@@ -21,12 +31,12 @@ async function tryDb<T>(fn: (c: Awaited<ReturnType<typeof collections>>) => Prom
 // ---------- products & offers ----------
 
 export async function getProduct(productId: string): Promise<Product | undefined> {
-  const p = await tryDb((c) => c.products.findOne({ _id: productId }, { projection: { embedding: 0 } }));
+  const p = await fromSeed((c) => c.products.findOne({ _id: productId }, { projection: { embedding: 0 } }));
   return p ?? (productId === fx.product._id ? fx.product : undefined);
 }
 
 export async function getOffers(productId: string): Promise<Offer[]> {
-  const o = await tryDb((c) => c.offers.find({ productId }).toArray());
+  const o = await fromSeed((c) => c.offers.find({ productId }).toArray());
   if (o?.length) return o;
   return fx.offers.filter((x) => x.productId === productId);
 }
@@ -52,7 +62,7 @@ const FALLBACK_USER: User = {
 };
 
 export async function getUser(userId: string): Promise<User> {
-  return (await tryDb((c) => c.users.findOne({ _id: userId }))) ?? { ...FALLBACK_USER, _id: userId };
+  return (await fromSeed((c) => c.users.findOne({ _id: userId }))) ?? { ...FALLBACK_USER, _id: userId };
 }
 
 export type CategorySpend = {
@@ -75,7 +85,7 @@ const FALLBACK_SPEND: CategorySpend[] = [
 
 /** 12-month spend by category with top merchants. Positive amounts only (refunds ignored). */
 export async function spendByCategory(userId: string, now = new Date()): Promise<CategorySpend[]> {
-  const rows = await tryDb(async (c) => {
+  const rows = await fromSeed(async (c) => {
     const agg = await c.transactions
       .aggregate<{ _id: { category: Category; merchantId: string }; total: number; n: number }>([
         { $match: { "meta.userId": userId, ts: { $gte: new Date(now.getTime() - 365 * DAY), $lte: now }, amountCents: { $gt: 0 } } },
@@ -101,7 +111,7 @@ export async function spendByCategory(userId: string, now = new Date()): Promise
 /** This calendar month's spend in one category (for budget headroom). */
 export async function monthToDateSpend(userId: string, category: Category, now = new Date()): Promise<number> {
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const r = await tryDb((c) =>
+  const r = await fromSeed((c) =>
     c.transactions
       .aggregate<{ total: number }>([
         { $match: { "meta.userId": userId, "meta.category": category, ts: { $gte: start, $lte: now }, amountCents: { $gt: 0 } } },
@@ -128,7 +138,7 @@ export type PriceStats = {
 
 export async function priceStats(productId: string, refCents: number, now = new Date()): Promise<PriceStats | undefined> {
   const since = new Date(now.getTime() - 90 * DAY);
-  const pts = await tryDb((c) =>
+  const pts = await fromSeed((c) =>
     c.priceHistory.find({ "meta.productId": productId, ts: { $gte: since, $lte: now } }).sort({ ts: 1 }).toArray(),
   );
   const series = pts?.length ? pts.map((p) => ({ ts: p.ts.getTime(), priceCents: p.priceCents })) : fallbackHistory(productId, now);
@@ -160,9 +170,29 @@ function fallbackHistory(productId: string, now: Date) {
     const ts = now.getTime() - (89 - i) * DAY;
     const dow = new Date(ts).getDay();
     const weekend = dow === 0 || dow === 6;
-    const dip = weekend && i % 21 < 7; // a weekend sale roughly every 3 weeks
+    const dip = weekend && i % 28 < 7; // a weekend sale roughly once a month
     return { ts, priceCents: dip ? 149_00 : 179_00 + ((i * 37) % 3) * 5_00 };
   });
+}
+
+// ---------- past purchases (duplicate-ownership check) ----------
+
+export type PastPurchase = { productId: string; title: string; amountCents: number; ts: Date };
+
+/** Orders in the same category over the last 12 months. Orders are written at runtime by purchase(), so always Mongo. */
+export async function recentPurchases(userId: string, category: Category, now = new Date()): Promise<PastPurchase[]> {
+  const rows = await tryDb(async (c) => {
+    const orders = await c.orders.find({ userId, ts: { $gte: new Date(now.getTime() - 365 * DAY) } }).sort({ ts: -1 }).limit(50).toArray();
+    if (!orders.length) return [];
+    const products = await c.products
+      .find({ _id: { $in: [...new Set(orders.map((o) => o.productId))] }, category }, { projection: { embedding: 0 } })
+      .toArray();
+    const byId = new Map(products.map((p) => [p._id, p]));
+    return orders
+      .filter((o) => byId.has(o.productId))
+      .map((o) => ({ productId: o.productId, title: byId.get(o.productId)!.title, amountCents: o.amountCents, ts: o.ts }));
+  });
+  return rows ?? [];
 }
 
 // ---------- verdicts ----------
