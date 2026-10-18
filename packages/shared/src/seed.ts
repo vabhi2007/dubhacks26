@@ -39,6 +39,11 @@ export async function ensureSchema(db: Db): Promise<string[]> {
     db.collection(COLLECTIONS.wishlist).createIndex({ userId: 1, status: 1 }),
     db.collection(COLLECTIONS.mandates).createIndex({ userId: 1, status: 1 }),
     db.collection(COLLECTIONS.orders).createIndex({ userId: 1, ts: -1 }),
+    // At most one pending approval per purchase, and short codes ("A7") unique among a user's pending approvals —
+    // every teammate's agent watches the same db, so duplicate requests must collapse.
+    db.collection(COLLECTIONS.approvals).createIndex({ userId: 1, kind: 1, productId: 1, offerId: 1, amountCents: 1 }, { name: "pending_dedupe", unique: true, partialFilterExpression: { status: "pending" } }),
+    db.collection(COLLECTIONS.approvals).createIndex({ userId: 1, shortCode: 1 }, { name: "pending_shortcode", unique: true, partialFilterExpression: { status: "pending" } }),
+    db.collection(COLLECTIONS.orders).createIndex({ idempotencyKey: 1 }, { name: "order_idempotency", unique: true, partialFilterExpression: { idempotencyKey: { $exists: true } } }),
   ]);
   return created;
 }
