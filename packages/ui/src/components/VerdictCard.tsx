@@ -59,7 +59,7 @@ export function VerdictCard({
 
       <ul className="mt-4 space-y-1.5">
         {verdict.reasons.map((r, i) => (
-          <li key={`${i}-${r}`}className="flex gap-2 text-sm text-text-muted">
+          <li key={`${i}-${r}`} className="flex gap-2 text-sm text-text-muted">
             <span aria-hidden className="mt-2 h-1 w-1 shrink-0 rounded-full bg-text-muted/60" />
             <span>{r}</span>
           </li>

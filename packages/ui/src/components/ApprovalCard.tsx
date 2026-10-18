@@ -37,7 +37,10 @@ export function ApprovalCard({
   // Expiry is enforced only in query filters (DESIGN.md §7), so a stored "pending" can be stale.
   // Check expiresAt here too, and flip to expired when it passes while the card is open.
   const expiresAtMs = new Date(approval.expiresAt).getTime();
-  const [pastExpiry, setPastExpiry] = useState(() => expiresAtMs <= Date.now());
+  // Start false so SSR and the first client render agree (Date.now() differs across the two);
+  // the effect below sets the real value right after mount. Prevents a hydration mismatch if
+  // this card is ever rendered server-side with an already-expired approval.
+  const [pastExpiry, setPastExpiry] = useState(false);
   useEffect(() => {
     const ms = expiresAtMs - Date.now();
     setPastExpiry(ms <= 0);
@@ -58,6 +61,16 @@ export function ApprovalCard({
     locked.current = false;
     setActed(false);
   }, [busy, approval._id]);
+  // Safety net: if the caller never wires `busy` (so the reset above can't fire), release the
+  // lock after a few seconds so a failed decision doesn't disable the buttons forever.
+  useEffect(() => {
+    if (!acted) return;
+    const id = setTimeout(() => {
+      locked.current = false;
+      setActed(false);
+    }, 8_000);
+    return () => clearTimeout(id);
+  }, [acted]);
   const decide = (fn?: () => void) => () => {
     if (locked.current || busy) return;
     locked.current = true;
