@@ -1,8 +1,8 @@
 // Owner: C. Side panel: receives a snap from background, POSTs /snap, renders product + verdict + offers + Watch.
 // Local components use @alfred/ui tokens; swap for D's VerdictCard / OfferRow when they land.
 import { useEffect, useRef, useState } from "react";
-import { APP_NAME, SnapResponse } from "@alfred/shared";
-import { ActivityFeed, OfferList, ProductHeader, SimilarList, VerdictCard, WatchButton } from "./components";
+import { APP_NAME, SnapResponse, watchTarget } from "@alfred/shared";
+import { ActivityFeed, OfferStrip, PriceHistory, ProductHeader, SimilarList, VerdictCard, WatchButton } from "./components";
 import { useWatchStatus } from "./watchStatus";
 import { useAgentEvents } from "./agentEvents";
 import { toImageRect, type Selection } from "../../lib/selection";
@@ -106,26 +106,33 @@ export default function App() {
   const canWatch = result && ((result.offers.length > 0 && result.verdict.kind !== "skip") || !!watch.status);
 
   return (
-    <main className="flex min-h-screen flex-col gap-4 p-5">
+    <main className="flex min-h-screen flex-col gap-4 p-4">
       <header className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold tracking-tight">{APP_NAME}</h1>
-        <kbd className="rounded-control border border-border px-1.5 py-0.5 text-xs text-text-muted">Alt+Shift+S</kbd>
+        <h1 className="font-serif text-[22px] leading-none">{APP_NAME}</h1>
+        <kbd className="border border-border px-1.5 py-0.5 font-mono text-[11px] text-text-muted">Alt+Shift+S</kbd>
       </header>
 
       {status.kind === "snapping" && <Snapping preview={status.preview} />}
       {status.kind === "error" && (
-        <p role="alert" className="rounded-card border border-skip/40 bg-skip/10 p-3 text-sm text-skip">{status.message}</p>
+        <p role="alert" className="border border-skip/40 bg-skip/10 p-3 text-sm text-skip">{status.message}</p>
       )}
       {status.kind === "idle" && !result && (
         <p className="text-sm text-text-muted">Press Alt+Shift+S to snap what's on screen. {APP_NAME} finds the exact product, the best price, and tells you honestly whether it's worth it.</p>
       )}
 
       {result && status.kind === "idle" && (
-        <div className="fade-in flex flex-col gap-4" key={result.verdict._id}>
+        <div className="fade-in flex flex-col gap-3.5" key={result.verdict._id}>
           <ProductHeader product={result.product} />
           <VerdictCard verdict={result.verdict} />
           {canWatch && <WatchButton agentUrl={AGENT_URL} product={result.product} verdict={result.verdict} status={watch.status} onStatus={watch.setStatus} />}
-          <OfferList offers={result.offers} bestOfferId={result.verdict.math.bestOfferId} />
+          {inCatalog(result.product._id) && (
+            <PriceHistory
+              agentUrl={AGENT_URL}
+              productId={result.product._id}
+              targetCents={watch.status ? undefined : watchTarget(result.verdict.math.priceCents, result.verdict.math.expectedDropCents)}
+            />
+          )}
+          <OfferStrip offers={result.offers} bestOfferId={result.verdict.math.bestOfferId} />
           <SimilarList products={result.similar} />
         </div>
       )}
@@ -134,13 +141,16 @@ export default function App() {
   );
 }
 
+// Unidentified snaps and products Claude named that aren't saved yet have no price history to fetch.
+const inCatalog = (id: string) => id !== "prd_unidentified" && !id.startsWith("prd_new_");
+
 function Snapping({ preview }: { preview: string }) {
   return (
     <div className="flex flex-col gap-3" aria-busy="true">
-      <img src={preview} alt="Your snap" className="max-h-40 w-full rounded-card border border-border object-cover opacity-70" />
+      <img src={preview} alt="Your snap" className="max-h-40 w-full border border-border object-cover opacity-70" />
       <p className="text-sm text-text-muted">Looking it up…</p>
-      <div className="h-28 animate-pulse rounded-card bg-surface-2 motion-reduce:animate-none" />
-      <div className="h-16 animate-pulse rounded-card bg-surface-2 motion-reduce:animate-none" />
+      <div className="h-28 animate-pulse bg-surface-2 motion-reduce:animate-none" />
+      <div className="h-16 animate-pulse bg-surface-2 motion-reduce:animate-none" />
     </div>
   );
 }
