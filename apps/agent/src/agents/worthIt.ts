@@ -6,6 +6,7 @@ import { Category, fmtUSD, type Offer, type Product, type Surface, type Verdict 
 import { collections, newId } from "@alfred/shared/db";
 import { emit } from "../core/events";
 import { anthropic } from "./client";
+import { usd } from "./format";
 import { env } from "../env";
 import {
   bestOffer, getOffers, getProduct, getUser, hasDb, monthToDateSpend, priceStats, recentPurchases, rememberVerdict, spendByCategory,
@@ -222,7 +223,5 @@ function ruleBasedJudgment(a: {
   return { kind, headline, reasons: reasons.slice(0, 4).length ? reasons.slice(0, 4) : [headline], replacesCategory: related ? cat : null };
 }
 
-// Whole dollars for prose. fmtUSD's compact mode still prints cents under $100 ("$30.00").
-const usd = (cents: number) => `$${Math.round(cents / 100).toLocaleString("en-US")}`;
 const label = (k: Verdict["kind"]) => ({ buy: "Buy", wait: "Wait", skip: "Skip" })[k];
 const round = (n: number, dp: number) => Math.round(n * 10 ** dp) / 10 ** dp;
