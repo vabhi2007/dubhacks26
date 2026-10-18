@@ -9,7 +9,8 @@
     ".": "./src/index.ts",
     "./db": "./src/db.ts",
     "./fixtures": "./src/fixtures.ts",
-    "./seed": "./src/seed.ts"
+    "./seed": "./src/seed.ts",
+    "./embed": "./src/embed.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
