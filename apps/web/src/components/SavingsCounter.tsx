@@ -1,9 +1,10 @@
 "use client";
 // Header savings counter. Fetches /stats (fixture fallback) and re-pulls when money moves,
-// via the shared /events connection. Count-up tick animation is part of the MVP-3 motion pass.
+// via the shared /events connection. Counts up on load and ticks when savings change (useCountUp).
 import { useEffect, useState } from "react";
 import type { AgentEvent, Stats } from "@alfred/shared";
 import { fmtUSD } from "@alfred/shared";
+import { useCountUp } from "@alfred/ui";
 import { getStats } from "../lib/api";
 import { useAgentEvent, useEvents } from "../lib/useEvents";
 
@@ -13,6 +14,7 @@ export function SavingsCounter() {
   const [stats, setStats] = useState<Stats | null>(null);
   const { status } = useEvents();
   const live = status === "live";
+  const saved = useCountUp(stats?.savedCents ?? 0);
 
   useEffect(() => {
     let active = true;
@@ -35,7 +37,7 @@ export function SavingsCounter() {
       <div className="text-right">
         <div className="text-[11px] uppercase tracking-wide text-text-muted">Saved by Alfred</div>
         <div className="num text-[20px] leading-none text-accent">
-          {stats ? fmtUSD(stats.savedCents) : "—"}
+          {stats ? fmtUSD(Math.round(saved)) : "—"}
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 // Typed client for the agent service (DESIGN.md §8.3).
 // Routes may be absent (connection refused) or stubbed (501) while teammates build —
 // readers fall back to @alfred/shared fixtures so the dashboard always renders.
-import type { Approval, ApprovalDecision, ChatRequest, Mandate, Offer, Order, Product, Stats, Verdict, WishlistItem } from "@alfred/shared";
+import type { Approval, ApprovalDecision, Category, ChatRequest, Mandate, Offer, Order, Product, Stats, Verdict, WishlistItem } from "@alfred/shared";
 import * as fx from "@alfred/shared/fixtures";
 
 export const AGENT_URL = process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8787";
@@ -266,3 +266,50 @@ export async function* streamChat(text: string, signal?: AbortSignal): AsyncGene
     }
   }
 }
+
+// GET /profile — 12-month spend profile (A). byMonth is oldest first; the first and last months are partial.
+export type SpendProfile = {
+  totals12moCents: number;
+  txCount: number;
+  window: { from: string; to: string };
+  byCategory: { category: Category; totalCents: number; txCount: number }[];
+  byMonth: { month: string; totalCents: number; byCategory: Partial<Record<Category, number>>; partial: boolean }[];
+  recurring: { merchant: string; merchantId: string; category: Category; monthlyCents: number; cadence: "weekly" | "biweekly" | "monthly"; lastChargedAt: string }[];
+  topMerchants: { merchant: string; merchantId: string; category: Category; totalCents: number; txCount: number }[];
+};
+
+// Offline example shaped like the seed's u_maya, so the page still renders without the agent.
+const fixtureProfile = (): SpendProfile => {
+  const months = ["2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"];
+  const totals = [380_00, 905_00, 1_120_00, 860_00, 830_00, 910_00, 880_00, 940_00, 900_00, 960_00, 925_00, 890_00, 530_00];
+  return {
+    totals12moCents: 11_130_15,
+    txCount: 1_212,
+    window: { from: "2025-10-18T00:00:00Z", to: "2026-10-18T00:00:00Z" },
+    byCategory: [
+      { category: "groceries", totalCents: 3_484_00, txCount: 67 },
+      { category: "home", totalCents: 1_532_00, txCount: 27 },
+      { category: "dining", totalCents: 1_387_00, txCount: 61 },
+      { category: "other", totalCents: 1_372_00, txCount: 38 },
+      { category: "phone", totalCents: 1_020_00, txCount: 12 },
+      { category: "coffee", totalCents: 640_00, txCount: 125 },
+      { category: "transport", totalCents: 554_00, txCount: 26 },
+      { category: "subscriptions", totalCents: 366_00, txCount: 36 },
+    ],
+    byMonth: months.map((month, i) => ({ month, totalCents: totals[i]!, byCategory: {}, partial: i === 0 || i === months.length - 1 })),
+    recurring: [
+      { merchant: "T-Mobile", merchantId: "mer_t_mobile", category: "phone", monthlyCents: 85_00, cadence: "monthly", lastChargedAt: "2026-10-02T00:00:00Z" },
+      { merchant: "Netflix", merchantId: "mer_netflix", category: "subscriptions", monthlyCents: 15_49, cadence: "monthly", lastChargedAt: "2026-10-09T00:00:00Z" },
+      { merchant: "Spotify", merchantId: "mer_spotify", category: "subscriptions", monthlyCents: 11_99, cadence: "monthly", lastChargedAt: "2026-10-05T00:00:00Z" },
+      { merchant: "iCloud", merchantId: "mer_icloud", category: "subscriptions", monthlyCents: 2_99, cadence: "monthly", lastChargedAt: "2026-10-12T00:00:00Z" },
+    ],
+    topMerchants: [
+      { merchant: "Trader Joe's", merchantId: "mer_trader_joes", category: "groceries", totalCents: 1_480_00, txCount: 28 },
+      { merchant: "QFC", merchantId: "mer_qfc", category: "groceries", totalCents: 1_120_00, txCount: 22 },
+      { merchant: "T-Mobile", merchantId: "mer_t_mobile", category: "phone", totalCents: 1_020_00, txCount: 12 },
+      { merchant: "Starbucks", merchantId: "mer_starbucks", category: "coffee", totalCents: 404_45, txCount: 80 },
+    ],
+  };
+};
+
+export const getProfile = () => withFallback<SpendProfile>(() => api("/profile"), fixtureProfile());
