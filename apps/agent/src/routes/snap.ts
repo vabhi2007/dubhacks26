@@ -29,7 +29,7 @@ snap.post(
         img = await heicToJpeg(img);
         console.log(`snap: converted HEIC → JPEG (${Math.round(img.length / 1024)} KB) in ${Date.now() - t}ms`);
       } catch (e) {
-        return c.json({ error: `couldn't read this HEIC photo: ${(e as Error).message}` }, 400);
+        return c.json({ error: `couldn't read this HEIF/AVIF photo: ${(e as Error).message}` }, 400);
       }
     }
     if (!sniffMime(img)) return c.json({ error: "image must be PNG, JPEG, WebP, GIF or HEIC" }, 400);
