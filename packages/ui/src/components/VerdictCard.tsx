@@ -86,7 +86,7 @@ export function VerdictCard({
   };
 
   return (
-    <div className={cn("rounded-card border border-border bg-surface p-6", className)}>
+    <div className={cn("rounded-card border border-border bg-surface p-5", className)}>
       <div className="flex items-center gap-4">
         {product?.imageUrl ? (
           // Plain <img>: this card is shared with the extension, which has no next/image.
@@ -125,7 +125,7 @@ export function VerdictCard({
         </button>
       </div>
 
-      {actions ? <div className="mt-5 flex flex-wrap gap-2">{actions}</div> : null}
+      {actions ? <div className="mt-4 flex flex-wrap gap-2">{actions}</div> : null}
 
       {/* grid-rows 0fr → 1fr animates to the content's natural height; instant under reduced motion. */}
       <div
@@ -136,7 +136,7 @@ export function VerdictCard({
         )}
       >
         <div className="min-h-0 overflow-hidden" inert={!open}>
-          <div className="mt-5 border-t border-border pt-5">
+          <div className="mt-4 border-t border-border pt-4">
             {details ? (
               // The graphs (each with its own takeaway line) replace the reason bullets, chips and Smart Pay line.
               opened ? details : null

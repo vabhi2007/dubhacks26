@@ -16,15 +16,15 @@ const DAY = 86_400_000;
 
 /** Horizontal row of graph panels; scrolls sideways (snapping per panel) when they don't fit. */
 function Row({ children }: { children: React.ReactNode }) {
-  return <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2">{children}</div>;
+  return <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2">{children}</div>;
 }
 
 function Graph({ title, caption, wide, children }: { title: string; caption?: string; wide?: boolean; children: React.ReactNode }) {
   return (
-    <section className={cn("flex shrink-0 snap-start flex-col border border-border bg-surface-2/40 p-4", wide ? "w-[480px]" : "w-[340px]")}>
-      <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-muted">{title}</h3>
+    <section className={cn("flex shrink-0 snap-start flex-col border border-border bg-surface-2/40 px-3 py-3", wide ? "w-[600px]" : "w-[440px]")}>
+      <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">{title}</h3>
       {children}
-      {caption ? <p className="mt-3 text-sm leading-relaxed text-text-muted">{caption}</p> : null}
+      {caption ? <p className="mt-2 text-sm leading-relaxed text-text-muted">{caption}</p> : null}
     </section>
   );
 }
