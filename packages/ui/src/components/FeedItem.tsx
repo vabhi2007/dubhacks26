@@ -6,7 +6,7 @@ import { cn } from "../cn";
 import { isoOrUndefined, relativeTime, shortDate } from "../time";
 import { useNow } from "../useNow";
 
-const AGENT_LABEL: Record<AgentEvent["agent"], string> = {
+export const AGENT_LABEL: Record<AgentEvent["agent"], string> = {
   orchestrator: "Alfred",
   vision: "Vision",
   deal: "Deal",
@@ -18,7 +18,7 @@ const AGENT_LABEL: Record<AgentEvent["agent"], string> = {
   messenger: "iMessage",
 };
 
-const SURFACE_LABEL: Record<AgentEvent["surface"], string> = {
+export const SURFACE_LABEL: Record<AgentEvent["surface"], string> = {
   web: "Web",
   extension: "Extension",
   imessage: "iMessage",
