@@ -130,6 +130,38 @@ export const createWatch = (productId: string, targetPriceCents: number) =>
     body: JSON.stringify({ productId, targetPriceCents, surface: "web" }),
   });
 
+// GET /returns (B): every purchase with its typical return window; open ones first. `priceDrop` = it's cheaper now while
+// a return is still possible. `windowDays: null` = a marketplace seller sets the terms.
+export type ReturnWindow = {
+  orderId: string;
+  productId: string;
+  title: string;
+  imageUrl?: string;
+  seller: string;
+  amountCents: number;
+  boughtAt: string;
+  windowDays: number | null;
+  returnBy?: string;
+  daysLeft?: number;
+  status: "open" | "closing" | "closed" | "seller";
+  estimated: boolean;
+  policyNote?: string;
+  priceDrop?: { nowCents: number; seller: string; savingsCents: number };
+};
+
+// Offline example: the Bambino bought at $165, now $149 with 22 days left.
+const fixtureReturns = (): ReturnWindow[] => {
+  const D = 86_400_000;
+  const bought = Date.now() - 8 * D;
+  return [{
+    orderId: "ord_fixture", productId: fx.product._id, title: fx.product.title, imageUrl: fx.product.imageUrl, seller: "Popover Kitchen",
+    amountCents: 165_00, boughtAt: new Date(bought).toISOString(), windowDays: 30, returnBy: new Date(bought + 30 * D).toISOString(),
+    daysLeft: 22, status: "open", estimated: true, priceDrop: { nowCents: 149_00, seller: "Popover Kitchen", savingsCents: 16_00 },
+  }];
+};
+
+export const getReturns = () => withFallback<ReturnWindow[]>(() => api("/returns"), fixtureReturns());
+
 // GET /timekeeper — upgrade now vs wait N months for the user's phone (B, #49). The agent reuses a
 // verdict from the last 6h; `refresh` asks it to re-check. Fixture verdict when offline.
 export const getTimekeeper = (refresh = false) =>

@@ -13,6 +13,7 @@ import {
   Gift,
   Clock,
   MessageSquare,
+  RotateCcw,
   SlidersHorizontal,
 } from "lucide-react";
 import { APP_NAME } from "@alfred/shared";
@@ -27,6 +28,7 @@ const NAV: Item[] = [
   { href: "/profile", label: "Spending", icon: PieChart },
   { href: "/wishlist", label: "Wishlist", icon: Heart },
   { href: "/mandates", label: "Mandates", icon: CreditCard },
+  { href: "/returns", label: "Returns", icon: RotateCcw },
   { href: "/rewards", label: "Rewards", icon: Gift },
   { href: "/timekeeper", label: "Timekeeper", icon: Clock },
   { href: "/chat", label: "Chat", icon: MessageSquare },
