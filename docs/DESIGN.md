@@ -203,7 +203,8 @@ type Verdict = {
   reasons: string[];                // 2–4 plain-language bullets
   math: { priceCents: number; bestOfferId?: string; paybackMonths?: number;
           relatedSpend12moCents?: number; budgetImpactPct?: number;
-          expectedDropCents?: number };
+          expectedDropCents?: number;
+          expectedWaitDays?: number };  // Worth-It "wait": days until the next likely sale (from dip cadence)
   smartPay?: { cardId: string; offerId?: string; rewardCents: number };
   timekeeper?: { waitMonths: number; costNowCents: number; costLaterCents: number;
                  tradeInSeries: { month: number; valueCents: number }[] };
