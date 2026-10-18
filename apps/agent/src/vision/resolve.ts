@@ -24,7 +24,8 @@ const MIN_SCORE = 3; // e.g. brand (2) + one title word (1)
 const DECISIVE_LEAD = 2; // a model-number match must beat the runner-up by this much to skip Claude
 const MAX_CANDIDATES = 8;
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const words = (s: string) => s.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1 && !STOP.has(w));
+// Single digits stay: they are model numbers ("AirPods 4", "Pixel 9"), and dropping them made "AirPods" a full model match.
+const words = (s: string) => s.toLowerCase().split(/[^a-z0-9]+/).filter((w) => (w.length > 1 || /\d/.test(w)) && !STOP.has(w));
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 export function queryTokens(d: Detection): string[] {
