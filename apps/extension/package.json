@@ -14,6 +14,8 @@
   "dependencies": {
     "@alfred/shared": "workspace:*",
     "@alfred/ui": "workspace:*",
+    "@fontsource/dm-serif-display": "^5.3.0",
+    "@fontsource/inter-tight": "^5.3.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },
