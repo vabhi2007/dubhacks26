@@ -246,7 +246,7 @@ authorize(mandateId, amountCents, merchantId, category):
 | `GET /timekeeper` | B | `Verdict` (mode timekeeper) for current device |
 | `GET /stats` | A | `{savedCents, rewardsEarnedCents, purchases, activeWatches}` |
 | `POST /webhooks/photon` | A | inbound iMessage → orchestrator |
-| `POST /admin/price-drop` `{productId, newPriceCents}` · `/admin/advance-time {days}` · `/admin/reset` | A | demo control |
+| `POST /admin/price-drop` `{productId, newPriceCents}` · `/admin/advance-time {days: 1–90}` (shifts every timestamp back `days`, refills the recent gap, expires stale approvals; `ALLOW_RESET=1` only) · `/admin/reset` | A | demo control |
 
 ### 8.4 Internal interfaces (swap real ↔ mock)
 ```ts

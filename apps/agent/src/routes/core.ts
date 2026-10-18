@@ -6,7 +6,7 @@ import { streamSSE } from "hono/streaming";
 import * as fx from "@alfred/shared/fixtures";
 import { AdminAdvanceTime, AdminPriceDrop, Approval, ApprovalDecision, type AgentEvent } from "@alfred/shared";
 import { env } from "../env";
-import { priceDrop, resetDemo } from "../core/admin";
+import { advanceTime, priceDrop, resetDemo } from "../core/admin";
 import { listApprovals, type ApprovalView } from "../core/approvals";
 import { emit, recentEvents } from "../core/events";
 import { listMandates, revokeMandate } from "../core/mandates";
@@ -125,7 +125,13 @@ core.post("/admin/inbound", async (c) => {
   }, lastApprovalAsked(userId));
   return c.json({ replies });
 });
-core.post("/admin/advance-time", async (c) => c.json({ todo: "A", ...AdminAdvanceTime.parse(await c.req.json()) }, 501));
+core.post("/admin/advance-time", async (c) => {
+  // Rewrites timestamps in the shared db, so it's gated like reset.
+  if (!resetAllowed) throw new HTTPException(403, { message: "advance-time is disabled here — it rewrites the shared db. Set ALLOW_RESET=1 only on Workstream A's / the demo machine." });
+  if (!live) throw new HTTPException(503, { message: "MONGODB_URI not set" });
+  const { days } = AdminAdvanceTime.parse(await c.req.json());
+  return c.json({ ok: true, days, counts: await advanceTime(userId, days) });
+});
 core.post("/admin/reset", async (c) => {
   if (!resetAllowed) throw new HTTPException(403, { message: "reset is disabled here — it wipes the shared db. Set ALLOW_RESET=1 only on Workstream A's / the demo machine." });
   if (!live) throw new HTTPException(503, { message: "MONGODB_URI not set — nothing to reset" });
