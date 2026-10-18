@@ -1,8 +1,10 @@
+"use client";
 // FeedItem — one row in the Agent Feed. Shows which sub-agent acted, on which surface,
 // a one-line summary, and relative time. Built against the `events` fixture.
+import { useEffect, useState } from "react";
 import type { AgentEvent } from "@alfred/shared";
 import { cn } from "../cn";
-import { relativeTime } from "../time";
+import { isoOrUndefined, relativeTime, shortDate } from "../time";
 
 const AGENT_LABEL: Record<AgentEvent["agent"], string> = {
   orchestrator: "Alfred",
@@ -28,6 +30,18 @@ const SURFACE_LABEL: Record<AgentEvent["surface"], string> = {
 const ACCENT_TYPES = new Set<AgentEvent["type"]>(["price_drop", "purchase", "approval_requested"]);
 
 export function FeedItem({ event, className }: { event: AgentEvent; className?: string }) {
+  // Server and first client render both have now=null → deterministic UTC placeholder
+  // (no hydration mismatch). After mount we switch to relative time and tick every minute.
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    setNow(new Date());
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const label = now ? relativeTime(event.ts, now) : shortDate(event.ts);
+  const iso = isoOrUndefined(event.ts);
+
   return (
     <li className={cn("flex gap-3 py-3", className)}>
       <span
@@ -40,8 +54,12 @@ export function FeedItem({ event, className }: { event: AgentEvent; className?: 
           <span className="font-medium text-text">{AGENT_LABEL[event.agent]}</span>
           <span aria-hidden>·</span>
           <span>{SURFACE_LABEL[event.surface]}</span>
-          <span aria-hidden>·</span>
-          <time dateTime={new Date(event.ts).toISOString()}>{relativeTime(event.ts)}</time>
+          {label ? (
+            <>
+              <span aria-hidden>·</span>
+              <time dateTime={iso}>{label}</time>
+            </>
+          ) : null}
         </div>
       </div>
     </li>

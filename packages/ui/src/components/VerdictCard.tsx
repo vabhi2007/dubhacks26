@@ -14,14 +14,17 @@ function Chip({ label }: { label: string }) {
   );
 }
 
+// Months from Claude can be noisy (e.g. 3.3333); show at most one decimal, no trailing ".0".
+const fmtMonths = (m: number) => (Math.round(m * 10) / 10).toString();
+
 function mathChips(v: Verdict): string[] {
   const m = v.math;
   const chips: string[] = [`Price ${fmtUSD(m.priceCents)}`];
-  if (m.paybackMonths != null) chips.push(`Pays back in ${m.paybackMonths}mo`);
+  if (m.paybackMonths != null) chips.push(`Pays back in ${fmtMonths(m.paybackMonths)}mo`);
   if (m.relatedSpend12moCents != null) chips.push(`${fmtUSD(m.relatedSpend12moCents, { compact: true })}/yr related`);
   if (m.budgetImpactPct != null) chips.push(`${Math.round(m.budgetImpactPct * 100)}% of budget`);
   if (m.expectedDropCents != null) chips.push(`~${fmtUSD(m.expectedDropCents)} likely drop`);
-  if (v.timekeeper) chips.push(`Wait ${v.timekeeper.waitMonths}mo`);
+  if (v.timekeeper) chips.push(`Wait ${fmtMonths(v.timekeeper.waitMonths)}mo`);
   return chips;
 }
 
