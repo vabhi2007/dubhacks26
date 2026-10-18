@@ -22,12 +22,17 @@ export const DetectionSchema = z.object({
 });
 
 // Lenient shape for free-text JSON (Perceptron): numbers as strings, missing ocr/caption.
+// Malformed items are dropped one at a time, so one bad object doesn't discard the rest.
 const num = z.coerce.number().catch(0);
+const LenientObject = z.object({ label: z.string(), bbox: z.object({ x: num, y: num, w: num, h: num }).catch({ x: 0, y: 0, w: 0, h: 0 }), conf: num });
 const LenientDetection = z.object({
-  objects: z.array(z.object({ label: z.string(), bbox: z.object({ x: num, y: num, w: num, h: num }), conf: num })).catch([]),
-  ocr: z.array(z.string()).catch([]),
+  objects: z.array(LenientObject.nullable().catch(null)).catch([]).transform((xs) => xs.filter((x) => x !== null)),
+  ocr: z.array(z.string().nullable().catch(null)).catch([]).transform((xs) => xs.filter((x) => x !== null)),
   caption: z.string().catch(""),
 });
+
+/** Nothing usable: no object, no text, no caption. Treated as a provider miss so the next provider gets a turn. */
+export const isEmptyDetection = (d: Detection) => !d.objects.length && !d.ocr.length && !d.caption;
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, Number.isFinite(n) ? n : 0));
 

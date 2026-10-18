@@ -142,7 +142,7 @@ Rules: accent used sparingly (≤1 primary action per view + key numbers). Never
 - **Products** (~200 mock + SerpAPI cache). **Hero products frozen**: Breville Bambino (F1/F2 demo) and an iPhone (F8 demo).
 - **Price history**: synthetic 90-day series per product (with realistic dips) — SerpAPI never polled by Watcher.
 - **Rewards programs** (~15), **cards & offers** (3 user cards, ~20 card-linked offers), **devices / trade-in curves / plans** (T-Mobile; synthetic).
-- `PRICE_SOURCE`: `live` → SerpAPI (then cache), `cache` → Mongo only, `mock` → mock catalog. Same for `VISION_SOURCE` (`perceptron` | `claude`) and `MESSENGER` (`photon` | `console`).
+- `PRICE_SOURCE`: `live` → SerpAPI (then cache), `cache` → Mongo only, `mock` → mock catalog. Same for `VISION_SOURCE` (`perceptron` → Claude on error | `claude` | `mock`) and `MESSENGER` (`photon` | `console`).
 
 ---
 
