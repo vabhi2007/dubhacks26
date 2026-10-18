@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { AgentEvent, Stats, Verdict } from "@alfred/shared";
-import { fmtUSD } from "@alfred/shared";
+import { fmtUSD, watchTarget } from "@alfred/shared";
 import { events as fxEvents, product as fxProduct, verdict as fxVerdict } from "@alfred/shared/fixtures";
 import { ApprovalCard, type ApprovalState, FeedItem, MoneyStat, VerdictCard } from "@alfred/ui";
 import {
@@ -30,18 +30,6 @@ const WATCH_EVENTS = new Set<AgentEvent["type"]>(["watch_created", "price_drop",
 
 const fixtureFeed = [...fxEvents].reverse();
 const verdictProductTitle = (id?: string) => (id === fxProduct._id ? fxProduct.title : undefined);
-
-// A watch target strictly below today's price (so "watch for a drop" actually waits):
-// price − expected drop, else a default 10% off. Mirrors the extension's watchTarget()
-// (apps/extension/.../components.tsx) — keep the two in sync (candidate for @alfred/shared).
-const DEFAULT_DISCOUNT = 0.1;
-function watchTarget(priceCents: number, expectedDropCents = 0): number | undefined {
-  const t =
-    expectedDropCents > 0 && expectedDropCents < priceCents
-      ? priceCents - expectedDropCents
-      : Math.floor(priceCents * (1 - DEFAULT_DISCOUNT));
-  return t >= 1 && t < priceCents ? t : undefined;
-}
 const resolvedDesc = (a: ApprovalView, b: ApprovalView) =>
   new Date(b.resolvedAt ?? 0).getTime() - new Date(a.resolvedAt ?? 0).getTime();
 
