@@ -2,8 +2,9 @@
 // Local components use @alfred/ui tokens; swap for D's VerdictCard / OfferRow when they land.
 import { useEffect, useRef, useState } from "react";
 import { APP_NAME, SnapResponse } from "@alfred/shared";
-import { OfferList, ProductHeader, VerdictCard, WatchButton } from "./components";
+import { ActivityFeed, OfferList, ProductHeader, VerdictCard, WatchButton } from "./components";
 import { useWatchStatus } from "./watchStatus";
+import { useAgentEvents } from "./agentEvents";
 
 const AGENT_URL = import.meta.env.WXT_AGENT_URL ?? "http://localhost:8787";
 
@@ -89,7 +90,8 @@ export default function App() {
     };
   }, []);
 
-  const watch = useWatchStatus(AGENT_URL, result?.product._id);
+  const feed = useAgentEvents(AGENT_URL);
+  const watch = useWatchStatus(AGENT_URL, result?.product._id, feed.subscribe);
   // A watch that already exists (or fired) stays visible even when this verdict says skip.
   const canWatch = result && ((result.offers.length > 0 && result.verdict.kind !== "skip") || !!watch.status);
 
@@ -116,6 +118,7 @@ export default function App() {
           <OfferList offers={result.offers} bestOfferId={result.verdict.math.bestOfferId} />
         </div>
       )}
+      {status.kind !== "snapping" && <ActivityFeed events={feed.events.slice(0, 5)} />}
     </main>
   );
 }

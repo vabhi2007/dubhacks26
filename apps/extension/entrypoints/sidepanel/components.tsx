@@ -1,7 +1,7 @@
 // Owner: C. Local side-panel components on @alfred/ui tokens. Replace with D's shared components as they land.
 import { useState, type ReactNode } from "react";
-import { fmtUSD, type Offer, type Product, type Verdict } from "@alfred/shared";
-import { cn, VerdictBadge } from "@alfred/ui";
+import { fmtUSD, type AgentEvent, type Offer, type Product, type Verdict } from "@alfred/shared";
+import { cn, FeedItem, VerdictBadge } from "@alfred/ui";
 import { statusFromItem, type WatchStatus } from "./watchStatus";
 
 export function ProductHeader({ product }: { product: Product }) {
@@ -166,5 +166,20 @@ export function WatchButton({ agentUrl, product, verdict, status, onStatus }: {
       ) : null}
       {state.kind === "error" && <p role="alert" className="text-xs text-skip">{state.message}</p>}
     </div>
+  );
+}
+
+/** What Alfred has been doing, live (D's FeedItem, same as the dashboard feed). */
+export function ActivityFeed({ events }: { events: AgentEvent[] }) {
+  if (!events.length) return null;
+  return (
+    <section>
+      <h2 className="mb-1 text-xs font-medium uppercase tracking-wide text-text-muted">Recent activity</h2>
+      <ul className="divide-y divide-border rounded-card border border-border bg-surface px-4">
+        {events.map((e) => (
+          <FeedItem key={e._id} event={e} className="fade-in" />
+        ))}
+      </ul>
+    </section>
   );
 }
