@@ -72,7 +72,10 @@ export async function checkWatches(userId: string, productId: string, trigger: s
         // needs_approval / declined: purchase() already created the approval; the item stays triggered until it resolves.
       } else {
         // No mandate covers it: ask; approving mints a one-time mandate inside A's resolveApproval().
-        await requestApproval({ userId, amountCents: best.priceCents, productId, offerId: best._id, agent: "watcher", surface: "system" });
+        await requestApproval({
+          userId, amountCents: best.priceCents, productId, offerId: best._id, agent: "watcher", surface: "system",
+          idempotencyKey: `watch:${w._id}:${trigger}`,
+        });
       }
     } catch (e) {
       // Release the claim so the next drop (or a retry) can fire it again.
@@ -111,10 +114,12 @@ export function startWatcher() {
   });
 }
 
-/** Active, unexpired mandate that covers this product's category; prefer the Watcher's own, then the most headroom. */
+/** The Watcher's own active, unexpired mandate covering this category, most headroom first.
+ *  Mandates are agent-scoped (core/mandates.ts): the Watcher can't spend one issued to another agent. */
 async function pickMandate(userId: string, product: Product): Promise<Mandate | undefined> {
   const c = await collections();
-  const ms = await c.mandates.find({ userId, status: "active", expiresAt: { $gt: new Date() }, categories: product.category }).toArray();
-  const headroom = (m: Mandate) => m.capCents - m.spentCents;
-  return ms.sort((a, b) => Number(b.agent === "watcher") - Number(a.agent === "watcher") || headroom(b) - headroom(a))[0];
+  const ms = await c.mandates
+    .find({ userId, agent: "watcher", status: "active", expiresAt: { $gt: new Date() }, categories: product.category })
+    .toArray();
+  return ms.sort((a, b) => b.capCents - b.spentCents - (a.capCents - a.spentCents))[0];
 }
