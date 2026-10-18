@@ -5,6 +5,7 @@ import { fmtUSD, SnapRequest, SnapResponse } from "@alfred/shared";
 import { env } from "../env";
 import { emit } from "../core/events";
 import { NEW_PRODUCT_PREFIX, resolveProduct, sniffMime, vision } from "../vision";
+import { heicToJpeg, isHeic } from "../vision/heic";
 import { getVerdict, priceProduct, rankOffers } from "../deal";
 
 export const snap = new Hono();
@@ -21,8 +22,17 @@ snap.post(
     const req = SnapRequest.parse(body);
     const b64 = req.image.replace(/^data:[^,]*,/, "").replace(/\s/g, "");
     if (!BASE64.test(b64)) return c.json({ error: "image must be non-empty base64 (or a base64 data URL)" }, 400);
-    const img: Uint8Array = Buffer.from(b64, "base64");
-    if (!sniffMime(img)) return c.json({ error: "image must be PNG, JPEG, WebP or GIF" }, 400);
+    let img: Uint8Array = Buffer.from(b64, "base64");
+    if (isHeic(img)) {
+      const t = Date.now();
+      try {
+        img = await heicToJpeg(img);
+        console.log(`snap: converted HEIC → JPEG (${Math.round(img.length / 1024)} KB) in ${Date.now() - t}ms`);
+      } catch (e) {
+        return c.json({ error: `couldn't read this HEIC photo: ${(e as Error).message}` }, 400);
+      }
+    }
+    if (!sniffMime(img)) return c.json({ error: "image must be PNG, JPEG, WebP, GIF or HEIC" }, 400);
     const userId = env.DEMO_USER_ID;
 
     const t0 = Date.now();

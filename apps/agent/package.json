@@ -13,7 +13,9 @@
     "@anthropic-ai/sdk": "^0.135.0",
     "@hono/node-server": "^2.1.5",
     "dotenv": "^18.0.8",
+    "heic-decode": "^2.1.0",
     "hono": "^4.13.13",
+    "jpeg-js": "^0.4.4",
     "spectrum-ts": "^12.11.0",
     "zod": "^4.6.7"
   },
