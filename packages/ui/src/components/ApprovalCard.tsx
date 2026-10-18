@@ -105,6 +105,11 @@ export function ApprovalCard({
             Earned <span className="num text-accent">+{fmtUSD(rewardCents)}</span> back.
           </p>
         ) : null}
+        {approval.channel && approval.channel !== "web" ? (
+          <p className="mt-1 text-xs text-text-muted">
+            Approved via {approval.channel === "imessage" ? "iMessage" : "voice"}
+          </p>
+        ) : null}
       </div>
     );
   }

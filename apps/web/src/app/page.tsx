@@ -1,9 +1,9 @@
 "use client";
 // Home — MVP-0 core loop surface (DESIGN.md §10). Stats, latest verdict, pending
-// approvals (Approve/Deny → POST /approvals/:id), and the live Agent Feed.
+// approvals (Approve/Deny → POST /approvals/:id), receipts, and the live Agent Feed.
 // When the agent is reachable we show ONLY its data (with empty states); fixtures are a
 // fallback purely for when it's unreachable, never mixed into live data.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { AgentEvent, Stats, Verdict } from "@alfred/shared";
 import { fmtUSD } from "@alfred/shared";
@@ -12,19 +12,26 @@ import { ApprovalCard, type ApprovalState, FeedItem, MoneyStat, VerdictCard } fr
 import {
   type ApiError,
   type ApprovalView,
+  type WatchView,
+  createWatch,
+  getApprovals,
   getLatestVerdict,
-  getPendingApprovals,
   getStats,
   getVerdict,
+  getWishlist,
   resolveApproval,
 } from "../lib/api";
 import { useAgentEvent, useEvents } from "../lib/useEvents";
 
-// Events that change the stats/approvals the demo watches — including the reset's "message".
-const RELOAD_ON = new Set<AgentEvent["type"]>(["approval_requested", "approval_resolved", "purchase", "message"]);
-const fixtureFeed = [...fxEvents].reverse();
+// Anything that moves money / changes stats or approvals (reset emits "message").
+const APPROVAL_EVENTS = new Set<AgentEvent["type"]>(["approval_requested", "approval_resolved", "purchase", "message"]);
+// Anything that changes a product's watch/purchase state.
+const WATCH_EVENTS = new Set<AgentEvent["type"]>(["watch_created", "price_drop", "approval_resolved", "purchase", "message"]);
 
+const fixtureFeed = [...fxEvents].reverse();
 const verdictProductTitle = (id?: string) => (id === fxProduct._id ? fxProduct.title : undefined);
+const resolvedDesc = (a: ApprovalView, b: ApprovalView) =>
+  new Date(b.resolvedAt ?? 0).getTime() - new Date(a.resolvedAt ?? 0).getTime();
 
 function CountStat({ label, value }: { label: string; value: number }) {
   return (
@@ -43,49 +50,51 @@ function EmptyCard({ children }: { children: React.ReactNode }) {
   return <div className="rounded-card border border-border bg-surface p-6 text-sm text-text-muted">{children}</div>;
 }
 
+// A non-interactive status pill used for the Latest Verdict CTA once a watch/purchase exists.
+function StatePill({ children, tone }: { children: React.ReactNode; tone: "accent" | "buy" }) {
+  const cls = tone === "buy" ? "text-buy bg-buy/10" : "text-accent bg-accent-subtle";
+  return <span className={`inline-flex items-center rounded-control px-4 py-2 text-sm font-medium ${cls}`}>{children}</span>;
+}
+
 export default function Home() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [liveVerdict, setLiveVerdict] = useState<Verdict | null>(null);
-  const [approvals, setApprovals] = useState<ApprovalView[]>([]);
-  const [states, setStates] = useState<Record<string, ApprovalState>>({});
+  const [pending, setPending] = useState<ApprovalView[]>([]);
+  const [receipts, setReceipts] = useState<ApprovalView[]>([]);
+  const [wishlist, setWishlist] = useState<WatchView[]>([]);
+  const [resolvedLocal, setResolvedLocal] = useState<Record<string, ApprovalState>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const { events, status } = useEvents();
 
   const offline = status === "offline";
 
-  const statesRef = useRef(states);
-  statesRef.current = states;
-
-  const reloadStats = useCallback(() => {
-    getStats().then((r) => setStats(r.data));
-  }, []);
-  const reloadApprovals = useCallback(() => {
-    getPendingApprovals().then((r) => {
-      setApprovals((prev) => {
-        // Keep approvals we've already resolved locally so their Receipt stays visible after
-        // they drop out of the pending list.
-        const resolvedShown = prev.filter((a) => statesRef.current[a._id] && !r.data.some((n) => n._id === a._id));
-        return [...resolvedShown, ...r.data];
-      });
-    });
-  }, []);
+  const reloadStats = useCallback(() => getStats().then((r) => setStats(r.data)), []);
+  const reloadPending = useCallback(() => getApprovals("pending").then((r) => setPending(r.data)), []);
+  const reloadReceipts = useCallback(
+    () => getApprovals("approved").then((r) => setReceipts([...r.data].sort(resolvedDesc).slice(0, 4))),
+    [],
+  );
+  const reloadWishlist = useCallback(() => getWishlist().then((r) => setWishlist(r.data)), []);
 
   useEffect(() => {
     reloadStats();
-    reloadApprovals();
-    // Latest verdict on first load; live `verdict` events keep it fresh below. Stays null when
-    // live-but-empty or offline, so the empty state / fixture fallback apply.
+    reloadPending();
+    reloadReceipts();
+    reloadWishlist();
+    // Latest verdict on first load; live `verdict` events keep it fresh below.
     getLatestVerdict().then((v) => v && setLiveVerdict(v));
-  }, [reloadStats, reloadApprovals]);
+  }, [reloadStats, reloadPending, reloadReceipts, reloadWishlist]);
 
-  // Scripted demo: /admin price drop → approval_requested → the approval appears here without a
-  // manual refresh; approve → approval_resolved/purchase → stats + feed update live. The latest
-  // verdict refreshes from each new verdict event.
+  // Scripted demo: price drop → approval_requested → approval appears; a YES on ANY channel
+  // (web / iMessage / voice) → approval_resolved + purchase → a Receipt shows here and the
+  // verdict CTA flips to Bought, regardless of where it was approved.
   useAgentEvent((e) => {
-    if (RELOAD_ON.has(e.type)) {
+    if (APPROVAL_EVENTS.has(e.type)) {
       reloadStats();
-      reloadApprovals();
+      reloadPending();
+      reloadReceipts();
     }
+    if (WATCH_EVENTS.has(e.type)) reloadWishlist();
     if (e.type === "verdict" && e.refs.verdictId) {
       getVerdict(e.refs.verdictId).then((v) => v && setLiveVerdict(v));
     }
@@ -94,34 +103,75 @@ export default function Home() {
   async function decide(a: ApprovalView, decision: "approve" | "deny") {
     const next: ApprovalState = decision === "approve" ? "approved" : "denied";
     setBusyId(a._id);
-    setStates((s) => ({ ...s, [a._id]: next }));
+    setResolvedLocal((s) => ({ ...s, [a._id]: next })); // instant morph for the web click
     try {
       await resolveApproval(a._id, decision);
       toast.success(decision === "approve" ? `Approved ${fmtUSD(a.amountCents)}` : "Declined");
       reloadStats();
+      reloadReceipts();
+      reloadPending();
+      reloadWishlist();
     } catch (err) {
       const { status: code, body } = err as ApiError;
       if (code == null) {
-        // No response at all → agent offline. Keep the optimistic outcome so the demo still reads.
+        // No response → agent offline. Keep the optimistic outcome so the demo still reads.
         toast.message("Agent offline — showing mock outcome", { description: `${decision} ${a.shortCode}` });
       } else {
-        // The agent answered with an error (e.g. 409 expired). Undo the optimistic receipt and surface it.
-        setStates((s) => {
+        // The agent refused (e.g. 409 expired). Undo the optimistic state and surface it.
+        setResolvedLocal((s) => {
           const n = { ...s };
           delete n[a._id];
           return n;
         });
         toast.error(`Couldn't ${decision} ${a.shortCode} — ${body || `error ${code}`}`);
-        reloadApprovals();
+        reloadPending();
       }
     } finally {
       setBusyId(null);
     }
   }
 
+  async function watch(v: Verdict) {
+    const target = v.math.priceCents;
+    try {
+      await createWatch(v.productId, target);
+      toast.success(`Watching — buys at ${fmtUSD(target)}`);
+      reloadWishlist();
+    } catch (err) {
+      const { status: code, body } = err as ApiError;
+      toast.error(code == null ? "Agent offline — not watching" : body || `Couldn't watch (${code})`);
+    }
+  }
+
   // Fixtures only when the agent is unreachable; otherwise live data (possibly empty).
   const feed = offline ? fixtureFeed : events;
   const verdict = offline ? fxVerdict : liveVerdict;
+
+  // Receipts to show: fetched resolved approvals, minus any still in the pending list.
+  const shownReceipts = receipts.filter((r) => !pending.some((p) => p._id === r._id));
+
+  // Latest Verdict CTA reflects the product's state: Bought > Watching > Watch for a drop.
+  const vpid = verdict?.productId;
+  const bought = vpid ? receipts.find((r) => r.productId === vpid && r.kind !== "enroll") : undefined;
+  const watching = vpid
+    ? wishlist.find((w) => w.productId === vpid && (w.status === "watching" || w.status === "triggered"))
+    : undefined;
+  const verdictCta = !verdict ? null : bought ? (
+    <StatePill tone="buy">
+      Bought for {fmtUSD(bought.amountCents)}
+      {bought.cardLast4 ? ` on ••${bought.cardLast4}` : ""}
+    </StatePill>
+  ) : watching ? (
+    <StatePill tone="accent">Watching — buys at {fmtUSD(watching.targetPriceCents)}</StatePill>
+  ) : (
+    <button
+      type="button"
+      onClick={() => watch(verdict)}
+      className="rounded-control bg-accent px-4 py-2 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
+    >
+      Watch for a drop
+    </button>
+  );
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-8">
@@ -143,15 +193,7 @@ export default function Home() {
               <VerdictCard
                 verdict={verdict}
                 product={{ title: verdictProductTitle(verdict.productId) ?? "", imageUrl: undefined }}
-                actions={
-                  <button
-                    type="button"
-                    onClick={() => toast.success("Watching for a price drop")}
-                    className="rounded-control bg-accent px-4 py-2 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
-                  >
-                    Watch for a drop
-                  </button>
-                }
+                actions={verdictCta}
               />
             ) : (
               <EmptyCard>No verdict yet — snap a product or ask Alfred whether something&rsquo;s worth it.</EmptyCard>
@@ -160,9 +202,9 @@ export default function Home() {
 
           <section>
             <SectionLabel>Pending approvals</SectionLabel>
-            {approvals.length ? (
+            {pending.length ? (
               <div className="space-y-3">
-                {approvals.map((a) => (
+                {pending.map((a) => (
                   <ApprovalCard
                     key={a._id}
                     approval={a}
@@ -170,7 +212,7 @@ export default function Home() {
                     cardBrand={a.cardBrand}
                     cardLast4={a.cardLast4}
                     rewardCents={a.rewardCents}
-                    state={states[a._id]}
+                    state={resolvedLocal[a._id]}
                     busy={busyId === a._id}
                     onApprove={() => decide(a, "approve")}
                     onDeny={() => decide(a, "deny")}
@@ -181,6 +223,25 @@ export default function Home() {
               <EmptyCard>No approvals waiting on you.</EmptyCard>
             )}
           </section>
+
+          {shownReceipts.length ? (
+            <section>
+              <SectionLabel>Recent</SectionLabel>
+              <div className="space-y-3">
+                {shownReceipts.map((r) => (
+                  <ApprovalCard
+                    key={r._id}
+                    approval={r}
+                    product={{ title: r.product?.title ?? "this purchase" }}
+                    cardBrand={r.cardBrand}
+                    cardLast4={r.cardLast4}
+                    rewardCents={r.rewardCents}
+                    state="approved"
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
         </div>
 
         <section className="lg:col-span-1">

@@ -54,8 +54,13 @@ const fixtureApprovalView: ApprovalView = {
 
 export const getStats = () => withFallback<Stats>(() => api("/stats"), fx.stats);
 
-export const getPendingApprovals = () =>
-  withFallback<ApprovalView[]>(() => api("/approvals?status=pending"), [fixtureApprovalView]);
+export const getApprovals = (status: Approval["status"]) =>
+  withFallback<ApprovalView[]>(
+    () => api(`/approvals?status=${status}`),
+    status === "pending" ? [fixtureApprovalView] : [],
+  );
+
+export const getPendingApprovals = () => getApprovals("pending");
 
 // A single verdict by id. Home fetches this from the newest `verdict` event's verdictId for
 // live updates. Returns null on 404/offline.
@@ -111,3 +116,9 @@ const fixtureWatch: WatchView = {
 };
 
 export const getWishlist = () => withFallback<WatchView[]>(() => api("/wishlist"), [fixtureWatch]);
+
+export const createWatch = (productId: string, targetPriceCents: number) =>
+  api<WishlistItem>("/wishlist", {
+    method: "POST",
+    body: JSON.stringify({ productId, targetPriceCents, surface: "web" }),
+  });
