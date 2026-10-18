@@ -22,7 +22,7 @@
 | 3 | 1:15–1:50 | Admin → iMessage | Hidden tab: **price drops to $149**. On the phone, Alfred pings: *"Bambino just hit **$149**. Buy on your Visa ••4821 (**+$4.47** back)? YES/NO."* Reply **YES**. On the dashboard the **Approval Card morphs into a Receipt** and the **savings ticker jumps +$100**, live. | Driver |
 | 4 | 1:50–2:25 | Extension | Open a **YouTube review of an iPhone**, pause on a frame, hit the **Snap** hotkey, drag a box. Side panel returns a **Timekeeper** verdict: *"**Wait 4 months** — your trade-in only drops $40 and you still owe $210 on financing."* "It's just as willing to tell me **no**." | Driver |
 | 5 | 2:25–2:40 | Dashboard | Rewards: *"Join Starbucks Rewards — ~**$54/yr** from your habits."* One tap to enroll (simulated). "It keeps finding money after checkout." | Narrator |
-| 6 | 2:40–2:55 | Dashboard / VEYZL | Trust beat: show the **VEYZL finding** — an early build let an auto-buy run without a human-approval cap — then the fix and the **passing check**. "We caught our own agent spending unsafely before it shipped." | Narrator |
+| 6 | 2:40–2:55 | Mandates | Trust beat: **revoke** the Kitchen card (it turns grey, REVOKED). Drop the price again from admin → Alfred **asks instead of buying**. "Guardrails live in code, not prompts. Revoke a card and the agent's spending power is gone." | Driver |
 | 7 | 2:55–3:00 | Slide | **Close.** "One agent. Every surface. Your money, your rules — and it always asks first." | Narrator |
 
 ---

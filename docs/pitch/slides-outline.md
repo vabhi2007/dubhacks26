@@ -7,7 +7,7 @@
 ### 1 — Title
 **Alfred**
 *Your agent spends like it's your money — because it is.*
-DubHacks '26 · Visa track (+ Perceptron, Photon, T-Mobile, VEYZL)
+DubHacks '26 · Visa track (+ Perceptron, Photon, T-Mobile)
 Small team credit line.
 
 ### 2 — The problem
@@ -31,10 +31,10 @@ iMessage · Browser extension · Dashboard — **one agent, one feed, one conver
 Simple diagram: **Extension / Web / iMessage → Hono agent → Claude (Opus 5.5 / Haiku 5.5) + Perceptron + SerpAPI + Voyage → MongoDB Atlas** (change streams → live feed + iMessage).
 Callout: **money moves only through `authorize()` mandates — enforced in code, not prompts.**
 
-### 7 — Trust, proven (VEYZL)
-We ran VEYZL on our own purchase guardrail.
-**Before:** auto-buy could run without a human-approval cap. **After:** fixed, check passes.
-"We caught our agent spending unsafely before it shipped."
+### 7 — Trust, by design
+Every agent spends through a **scoped virtual card** (cap, categories, expiry), checked atomically by `authorize()`.
+Over the confirm threshold → it **asks first**. Revoked card → it **can't buy at all**.
+"Your money, your rules, enforced in code, not prompts."
 
 ### 8 — Close + ask
 One agent. Every surface. Your money, your rules — and it always asks first.
