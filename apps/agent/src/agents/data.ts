@@ -41,14 +41,14 @@ export async function getOffers(productId: string): Promise<Offer[]> {
   return fx.offers.filter((x) => x.productId === productId);
 }
 
-/** Cheapest exact-match new US offer; falls back to cheapest exact match, then cheapest overall. */
+/** Cheapest exact-match new US offer; falls back to cheapest exact match, then cheapest variant. Never a different product. */
 export function bestOffer(offers: Offer[]): Offer | undefined {
   const byPrice = (a: Offer, b: Offer) => a.priceCents - b.priceCents;
   const exact = offers.filter((o) => o.matched === "exact");
   return (
     exact.filter((o) => o.condition === "new" && o.region === "US").sort(byPrice)[0] ??
     exact.sort(byPrice)[0] ??
-    [...offers].sort(byPrice)[0]
+    offers.filter((o) => o.matched === "variant").sort(byPrice)[0]
   );
 }
 
@@ -105,7 +105,7 @@ export async function spendByCategory(userId: string, now = new Date()): Promise
     }
     return [...byCat.values()].map((cs) => ({ ...cs, topMerchants: cs.topMerchants.sort((a, b) => b.totalCents - a.totalCents).slice(0, 3) }));
   });
-  return (rows?.length ? rows : FALLBACK_SPEND).sort((a, b) => b.totalCents - a.totalCents);
+  return (rows?.length ? rows : [...FALLBACK_SPEND]).sort((a, b) => b.totalCents - a.totalCents);
 }
 
 /** This calendar month's spend in one category (for budget headroom). */
@@ -130,9 +130,9 @@ export type PriceStats = {
   minCents: number;
   maxCents: number;
   medianCents: number;
-  /** Median of each 7-day window's low — the price you can realistically wait for. */
+  /** The price you can realistically wait for: median of the dipped weeks' lows, else p25 of weekly lows. */
   typicalLowCents: number;
-  /** How many distinct 7-day windows dipped ≥5% below `refCents`. */
+  /** How many calendar weeks (Mon–Sun) dipped ≥5% below `refCents`. */
   dipsBelowRef: number;
 };
 
@@ -146,20 +146,23 @@ export async function priceStats(productId: string, refCents: number, now = new 
 
   const prices = series.map((p) => p.priceCents).sort((a, b) => a - b);
   const median = (xs: number[]) => xs[Math.floor(xs.length / 2)]!;
+  // Bucket by calendar week starting Monday (epoch day 4 = Mon 1970-01-05) so a Sat+Sun sale counts once.
   const weeklyLows = new Map<number, number>();
   for (const p of series) {
-    const w = Math.floor((now.getTime() - p.ts) / (7 * DAY));
+    const w = Math.floor((p.ts - 4 * DAY) / (7 * DAY));
     weeklyLows.set(w, Math.min(weeklyLows.get(w) ?? Infinity, p.priceCents));
   }
   const lows = [...weeklyLows.values()].sort((a, b) => a - b);
+  // Infrequent sales would vanish under a plain median, so measure the dips themselves.
+  const dips = lows.filter((l) => l <= refCents * 0.95);
   return {
     days: 90,
     points: series.length,
     minCents: prices[0]!,
     maxCents: prices.at(-1)!,
     medianCents: median(prices),
-    typicalLowCents: median(lows),
-    dipsBelowRef: lows.filter((l) => l <= refCents * 0.95).length,
+    typicalLowCents: dips.length ? median(dips) : lows[Math.floor(lows.length / 4)]!,
+    dipsBelowRef: dips.length,
   };
 }
 
@@ -170,7 +173,7 @@ function fallbackHistory(productId: string, now: Date) {
     const ts = now.getTime() - (89 - i) * DAY;
     const dow = new Date(ts).getDay();
     const weekend = dow === 0 || dow === 6;
-    const dip = weekend && i % 28 < 7; // a weekend sale roughly once a month
+    const dip = weekend && Math.floor((ts - 4 * DAY) / (7 * DAY)) % 4 === 0; // one weekend sale every 4 weeks
     return { ts, priceCents: dip ? 149_00 : 179_00 + ((i * 37) % 3) * 5_00 };
   });
 }
@@ -179,25 +182,32 @@ function fallbackHistory(productId: string, now: Date) {
 
 export type PastPurchase = { productId: string; title: string; amountCents: number; ts: Date };
 
-/** Orders in the same category over the last 12 months. Orders are written at runtime by purchase(), so always Mongo. */
+/** Orders in the same category over the last 12 months. Orders are written at runtime by purchase(), so always Mongo;
+ *  products resolve through getProduct so they follow SEED_SOURCE. */
 export async function recentPurchases(userId: string, category: Category, now = new Date()): Promise<PastPurchase[]> {
-  const rows = await tryDb(async (c) => {
-    const orders = await c.orders.find({ userId, ts: { $gte: new Date(now.getTime() - 365 * DAY) } }).sort({ ts: -1 }).limit(50).toArray();
-    if (!orders.length) return [];
-    const products = await c.products
-      .find({ _id: { $in: [...new Set(orders.map((o) => o.productId))] }, category }, { projection: { embedding: 0 } })
-      .toArray();
-    const byId = new Map(products.map((p) => [p._id, p]));
-    return orders
-      .filter((o) => byId.has(o.productId))
-      .map((o) => ({ productId: o.productId, title: byId.get(o.productId)!.title, amountCents: o.amountCents, ts: o.ts }));
-  });
-  return rows ?? [];
+  const orders = await tryDb((c) => c.orders.find({ userId, ts: { $gte: new Date(now.getTime() - 365 * DAY) } }).sort({ ts: -1 }).toArray());
+  if (!orders?.length) return [];
+  const ids = [...new Set(orders.map((o) => o.productId))];
+  const byId = new Map((await Promise.all(ids.map(getProduct))).filter((p) => p?.category === category).map((p) => [p!._id, p!]));
+  return orders
+    .filter((o) => byId.has(o.productId))
+    .map((o) => ({ productId: o.productId, title: byId.get(o.productId)!.title, amountCents: o.amountCents, ts: o.ts }));
 }
 
 // ---------- verdicts ----------
 
+// Recent verdicts in process memory, so /verdicts/:id works with no DB (or when a write failed).
+const recentVerdicts = new Map<string, Verdict>();
+
+export function rememberVerdict(v: Verdict) {
+  recentVerdicts.set(v._id, v);
+  if (recentVerdicts.size > 500) recentVerdicts.delete(recentVerdicts.keys().next().value!);
+}
+
 export async function getVerdict(id: string): Promise<Verdict | undefined> {
-  const v = await tryDb((c) => c.verdicts.findOne({ _id: id }));
-  return v ?? [fx.verdict, fx.timekeeperVerdict].find((f) => f._id === id);
+  return (
+    recentVerdicts.get(id) ??
+    (await tryDb((c) => c.verdicts.findOne({ _id: id }))) ??
+    [fx.verdict, fx.timekeeperVerdict].find((f) => f._id === id)
+  );
 }

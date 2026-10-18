@@ -8,7 +8,7 @@ import { emit } from "../core/events";
 import { anthropic } from "./client";
 import { env } from "../env";
 import {
-  bestOffer, getOffers, getProduct, getUser, hasDb, monthToDateSpend, priceStats, recentPurchases, spendByCategory,
+  bestOffer, getOffers, getProduct, getUser, hasDb, monthToDateSpend, priceStats, recentPurchases, rememberVerdict, spendByCategory,
   type CategorySpend, type PastPurchase,
 } from "./data";
 
@@ -48,19 +48,22 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
   if (!product) throw new Error(`worthIt: unknown product ${productId}`);
   const offers = input.offers?.length ? input.offers : await getOffers(productId);
   const best = bestOffer(offers);
-  if (!best) throw new Error(`worthIt: no offers for ${productId}`);
+  if (!best) throw new Error(`worthIt: no exact or variant offers for ${productId}`);
 
-  const [user, spend, mtd, history, owned] = await Promise.all([
-    getUser(userId),
+  const user = await getUser(userId);
+  const monthlyBudget = user.settings.monthlyBudgets[product.category];
+  const hasBudget = monthlyBudget != null;
+  const [spend, mtd, history, owned] = await Promise.all([
     spendByCategory(userId, now),
-    monthToDateSpend(userId, product.category, now),
+    hasBudget ? monthToDateSpend(userId, product.category, now) : 0,
     priceStats(productId, best.priceCents, now),
     recentPurchases(userId, product.category, now),
   ]);
 
   const price = best.priceCents;
-  const monthlyBudget = user.settings.monthlyBudgets[product.category];
-  const budgetImpactPct = monthlyBudget ? round(price / monthlyBudget, 2) : undefined;
+  // A $0 budget means "don't spend here": no finite ratio, but it must still count as over budget.
+  const zeroBudget = monthlyBudget === 0;
+  const budgetImpactPct = hasBudget && !zeroBudget ? round(price / monthlyBudget, 2) : undefined;
   const expectedDropCents =
     history && history.dipsBelowRef > 0 ? Math.max(0, price - history.typicalLowCents) : 0;
   const paybackByCategory = Object.fromEntries(
@@ -82,9 +85,11 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
       weeksDippedAtLeast5PctBelowBest: history.dipsBelowRef,
     },
     expectedDrop: fmtUSD(expectedDropCents),
-    budget: monthlyBudget
-      ? { category: product.category, monthly: fmtUSD(monthlyBudget), spentThisMonth: fmtUSD(mtd), priceAsPctOfMonthly: `${Math.round(budgetImpactPct! * 100)}%` }
-      : { category: product.category, monthly: "no budget set" },
+    budget: !hasBudget
+      ? { category: product.category, monthly: "no budget set" }
+      : zeroBudget
+        ? { category: product.category, monthly: "$0 — user chose not to spend in this category", spentThisMonth: fmtUSD(mtd) }
+        : { category: product.category, monthly: fmtUSD(monthlyBudget), spentThisMonth: fmtUSD(mtd), priceAsPctOfMonthly: `${Math.round(budgetImpactPct! * 100)}%` },
     spend12mo: spend.slice(0, 8).map((s) => ({
       category: s.category,
       total: fmtUSD(s.totalCents),
@@ -98,7 +103,7 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
 
   const j = await judge(facts).catch((e) => {
     console.warn("[worth_it] Claude unavailable, using rule-based verdict:", (e as Error).message);
-    return ruleBasedJudgment({ product, price, expectedDropCents, budgetImpactPct, spend, paybackByCategory, owned, productId });
+    return ruleBasedJudgment({ product, price, expectedDropCents, budgetImpactPct, zeroBudget, spend, paybackByCategory, owned, productId });
   });
 
   const related = j.replacesCategory ? spend.find((s) => s.category === j.replacesCategory) : undefined;
@@ -121,17 +126,23 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
     createdAt: now,
   };
 
+  rememberVerdict(verdict);
+  // The verdict is already paid for — a slow or unreachable Atlas must not turn it into a 500.
   if (hasDb()) {
-    const c = await collections();
-    await c.verdicts.insertOne(verdict);
-    await emit({
-      userId,
-      agent: "worth_it",
-      surface,
-      type: "verdict",
-      summary: `${label(verdict.kind)} — ${verdict.headline}`,
-      refs: { productId, verdictId: verdict._id },
-    });
+    try {
+      const c = await collections();
+      await c.verdicts.insertOne(verdict);
+      await emit({
+        userId,
+        agent: "worth_it",
+        surface,
+        type: "verdict",
+        summary: `${label(verdict.kind)} — ${verdict.headline}`,
+        refs: { productId, verdictId: verdict._id },
+      });
+    } catch (e) {
+      console.warn("[worth_it] failed to persist verdict/event:", (e as Error).message);
+    }
   }
   return verdict;
 }
@@ -161,7 +172,7 @@ const SUBSTITUTES: [RegExp, Category][] = [
 
 /** Deterministic verdict so the mock path works with no API key (and survives API outages). */
 function ruleBasedJudgment(a: {
-  product: Product; productId: string; price: number; expectedDropCents: number; budgetImpactPct?: number;
+  product: Product; productId: string; price: number; expectedDropCents: number; budgetImpactPct?: number; zeroBudget: boolean;
   spend: CategorySpend[]; paybackByCategory: Record<string, number>; owned: PastPurchase[];
 }): z.infer<typeof Judgment> {
   const cat = SUBSTITUTES.find(([re]) => re.test(a.product.title))?.[1] ?? null;
@@ -172,14 +183,16 @@ function ruleBasedJudgment(a: {
   if (related && payback !== undefined)
     reasons.push(`You spent ${usd(related.totalCents)} on ${cat} in 12 months — pays back in ~${payback} months.`);
   if (a.expectedDropCents > 0) reasons.push(`Price has dipped ~${usd(a.expectedDropCents)} below ${usd(a.price)} recently.`);
-  if (a.budgetImpactPct !== undefined) reasons.push(`${usd(a.price)} is ${Math.round(a.budgetImpactPct * 100)}% of your monthly ${a.product.category} budget.`);
+  if (a.zeroBudget) reasons.push(`You set your ${a.product.category} budget to $0.`);
+  else if (a.budgetImpactPct !== undefined) reasons.push(`${usd(a.price)} is ${Math.round(a.budgetImpactPct * 100)}% of your monthly ${a.product.category} budget.`);
   if (dup) reasons.push(`You bought ${dup.title} for ${usd(dup.amountCents)} in the last year.`);
 
   let kind: "buy" | "wait" | "skip";
   let headline: string;
-  if (dup?.productId === a.productId || (!related && (a.budgetImpactPct ?? 0) > 1)) {
+  if (dup?.productId === a.productId || a.zeroBudget || (!related && (a.budgetImpactPct ?? 0) > 1)) {
     kind = "skip";
-    headline = dup?.productId === a.productId ? `Skip — you already bought this ${dup.title}.` : `Skip — ${usd(a.price)} with no habit it replaces.`;
+    headline = dup?.productId === a.productId ? `Skip — you already bought this ${dup.title}.`
+      : a.zeroBudget ? `Skip — your ${a.product.category} budget is $0.` : `Skip — ${usd(a.price)} with no habit it replaces.`;
   } else if (a.expectedDropCents >= a.price * 0.05) {
     kind = "wait";
     headline = `Wait — it usually dips ~${usd(a.expectedDropCents)} below today's price.`;
@@ -193,6 +206,7 @@ function ruleBasedJudgment(a: {
   return { kind, headline, reasons: reasons.slice(0, 4).length ? reasons.slice(0, 4) : [headline], replacesCategory: related ? cat : null };
 }
 
+// Whole dollars for prose. fmtUSD's compact mode still prints cents under $100 ("$30.00").
 const usd = (cents: number) => `$${Math.round(cents / 100).toLocaleString("en-US")}`;
 const label = (k: Verdict["kind"]) => ({ buy: "Buy", wait: "Wait", skip: "Skip" })[k];
 const round = (n: number, dp: number) => Math.round(n * 10 ** dp) / 10 ** dp;
