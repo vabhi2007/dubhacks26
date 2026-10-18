@@ -57,7 +57,7 @@ Trustworthy agentic commerce is mostly a **systems** problem, not a prompt probl
 TypeScript · Node 22 · Hono · Next.js · React · Tailwind · shadcn/ui · WXT · Anthropic Claude (Opus + Haiku) · Perceptron · Photon 2.0 · SerpAPI · Voyage AI · MongoDB Atlas · Turborepo · pnpm · VEYZL
 
 ## Tracks
-Visa (primary) · Perceptron · Photon · T-Mobile · Cloudforce · VEYZL · SideShift [confirm final list before submitting]
+Visa (primary) · Perceptron · Photon · T-Mobile · VEYZL · SideShift [confirm final list before submitting]
 
 ---
 **Links:** Demo video → `[link]` · Repo → `[link]` · Team → `[names]`

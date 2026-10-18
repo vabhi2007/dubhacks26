@@ -15,7 +15,7 @@
 
 One **Spending Profile** (mock transaction history) powers every feature. Every action lands in one **Agent Feed**, regardless of surface (dashboard, extension, iMessage).
 
-Tracks targeted: **Visa** (main), **Perceptron** (perception), **Photon** (iMessage), **VEYZL**, **T-Mobile**, **Cloudforce** Side Kick, **SideShift** (pitch only). Stretch: **Photon Voice**.
+Tracks targeted: **Visa** (main), **Perceptron** (perception), **Photon** (iMessage), **VEYZL**, **T-Mobile**, **SideShift** (pitch only). Stretch: **Photon Voice**.
 
 ## 2. Features
 
@@ -29,7 +29,6 @@ Tracks targeted: **Visa** (main), **Perceptron** (perception), **Photon** (iMess
 | F6 | **Rewards Optimizer** | Mines merchant spend → recommends (simulated one-tap enroll) from ~15 curated programs with $/yr estimate | Visa |
 | F7 | **iMessage Agent** | Photon 2.0: approvals (YES/NO), photo intake, "should I buy this?" chat, rewards nudges. Shares conversation state with web | Photon |
 | F8 | **Timekeeper** | Worth-It mode for phones: "Upgrade now / wait N months" from device age, financing balance, trade-in decay curve, usage; optional household plan fit | T-Mobile |
-| F9 | **Spending Personality Side Kick** | Standalone 3-question agent built in Cloudforce Purple; posted to LinkedIn early | Cloudforce |
 | S1 | *(stretch)* **Voice approvals** | High-stakes approvals (> call threshold) via outbound call on Photon SMS number → SIP → Retell/ElevenLabs; transcript to feed | Photon Voice |
 
 **Non-goals:** real payments, real loyalty enrollment, real bank data, auth/multi-tenant, deployment.
@@ -98,7 +97,7 @@ docs/             this doc, demo script
 
 ## 6. Design system
 
-**Feel:** premium fintech — Linear / Mercury / Ramp / Arc. Calm, confident, dense-but-breathable. Motion **only on state change**.
+**Feel:** premium fintech — Linear / Mercury / Ramp / Arc, with a private-bank editorial touch. Calm, confident, **visual over verbose**: show a number or a graph before a sentence. Motion on state change **and** a short, one-time entrance for charts and cards.
 
 ### Color (dark-first; light mode supported)
 Accent is a **tough, deep gold-yellow** — mustard/goldenrod, never neon or lemon.
@@ -113,6 +112,7 @@ Accent is a **tough, deep gold-yellow** — mustard/goldenrod, never neon or lem
 | `--text-muted` | `#8E8E93` | `#6B6A66` | secondary |
 | `--accent` | `#E2A829` | `#C98E12` | primary actions, highlights, savings |
 | `--accent-hover` | `#EDB842` | `#B07C0E` | |
+| `--gold-gradient` | `linear-gradient(180deg, #F0C04A 0%, #E2A829 55%, #C8901A 100%)` | `linear-gradient(180deg, #DDA72A 0%, #C98E12 55%, #A9760C 100%)` | **primary (yellow) buttons**: a subtle gold sheen, not shiny; hover brightens ~4% |
 | `--accent-subtle` | `rgba(226,168,41,0.12)` | `rgba(201,142,18,0.10)` | chips, selected rows |
 | `--on-accent` | `#141414` | `#141414` | text on accent fills (always dark) |
 | `--buy` | `#4CAF7A` | `#2F8F5B` | verdict Buy |
@@ -122,16 +122,36 @@ Accent is a **tough, deep gold-yellow** — mustard/goldenrod, never neon or lem
 Rules: accent used sparingly (≤1 primary action per view + key numbers). Never yellow text on light backgrounds below 18px — use `--on-accent` on accent fills instead.
 
 ### Type, shape, space
-- **Geist Sans** UI, **Geist Mono** for money/numbers (tabular figures).
-- Scale: 12 / 14 (body) / 16 / 20 / 28 / 40 (hero numbers).
-- Radius: 10px cards, 8px controls, 999px chips. Spacing on 4px grid; generous card padding (20–24px).
-- Elevation via border + subtle shadow; glass (`backdrop-blur`) **only** on floating layers (approval toast, extension panel header).
+- **Headings:** **DM Serif Display** (page titles, section heroes, verdict headlines ≥ 20px). Never for body text or numbers.
+- **Money and numbers:** **Inter Tight** with `font-variant-numeric: tabular-nums`, semibold. It's the closest free match to Robinhood's Capsule Sans. Use the `.num` class everywhere a dollar amount, percent or count appears. Hero numbers are 40–56px.
+- **Body/UI:** Geist Sans. Geist Mono only for codes/ids (approval short codes, card last4).
+- Scale: 12 / 14 (body) / 16 / 20 / 28 / 40 / 56 (hero numbers).
+- **Corners: square (`border-radius: 0`) on everything**: cards, buttons, inputs, chips, charts, the side panel. **The one exception is credit-card visuals (mandates)**, which keep a realistic ~12px radius so they read as physical cards.
+- Spacing on a 4px grid; card padding 20–24px. Elevation via a 1px border + subtle shadow; glass only on floating layers.
+- **Less text:** lists are **compact rows** (≤ 56px tall). Detail lives one click away on a sub-page; verdict reasons are capped at 2 lines in lists.
+
+### Data visualization (Recharts)
+Prefer a graph whenever data has a shape. Standard charts:
+| Data | Chart |
+|---|---|
+| Price history (90d) | **Line/area chart**, gold line, dashed horizontal line at the watch target, dot at today, shaded weekend dips |
+| Payback / ROI | **Break-even bar chart**: monthly bars of cumulative savings (from the replaced spend) vs a cost line at the purchase price. The crossing month is labeled "Breaks even · month N" |
+| Trade-in value (Timekeeper) | **Line chart**, with markers for "upgrade now" vs "wait N months" |
+| Spend by category | **Horizontal bar** (sorted) or donut, using the category color scale |
+| Mandate usage | **Progress bar / radial** on the card visual: spent vs cap |
+| Offers | **Dot strip** on one price axis (new / refurb / used), best offer highlighted |
+Rules: no 3D, no pie charts with > 6 slices, label the key number directly on the chart, tooltips on hover, axes minimal (no gridline clutter), colors from tokens.
+
+### Signature components
+- **Watchlist row:** a short rectangle. Product name + current price (`.num`) + target on the left, a **small product image on the right**, and a **›** arrow that opens `/wishlist/[productId]`: a sub-page with the price-history line chart, the break-even bar chart, the offers dot strip, and the verdict. No paragraphs in the row. Products without an image get a monogram tile (brand initials on `--surface-2`).
+- **Mandate = credit card:** aspect ratio 1.586:1, dark metallic gradient (gold tint for the active card), EMV chip, **VISA** wordmark, `•••• 4821` in Geist Mono, mandate label as the "cardholder", expiry `MM/YY`, cap usage bar along the bottom edge. Revoked cards are desaturated with a "REVOKED" stamp.
 
 ### Motion (Motion library)
 - Durations 150–250ms; springs (`stiffness ~400, damping ~35`) for layout; ease-out for fades.
 - **Allowed moments:** feed items slide/fade in; savings counter ticks; Approval Card morphs → Receipt on approve; verdict skeleton → reveal; streaming agent reasoning text; mandate progress fill; side panel slide.
-- **Not allowed:** looping/ambient animation, parallax, bouncing icons, page-load choreography.
-- Respect `prefers-reduced-motion` (fade only).
+- **Entrance animations (once per mount):** charts draw in (lines stroke left→right, bars grow from the baseline, ~600ms ease-out); cards and rows fade-up with a 40ms stagger (max ~8 items); money values count up from 0 the first time they render. Never replay on re-render or live updates. Live updates use the state-change animations above.
+- **Not allowed:** looping/ambient animation, parallax, bouncing icons, long page-load choreography (> 800ms total).
+- Respect `prefers-reduced-motion`: no draw-in or count-up; render the final state with a fade only.
 
 ### Core shared components (`packages/ui`)
 `VerdictCard`, `ApprovalCard` (+ `Receipt` state), `OfferRow`, `MandateCard`, `FeedItem`, `MoneyStat` (ticker), `RewardCard`, `TimekeeperChart`, `ChatPanel`, `AgentBadge` (which sub-agent acted), `SurfaceBadge` (web / extension / iMessage / voice).
@@ -267,7 +287,6 @@ interface Embedder  { embed(texts: string[]): Promise<number[][]> }
 **Owns:** `packages/ui`, `apps/web`, pitch assets.
 - Design tokens (Section 6) + shared components (start with static mock props from Section 8 types so C can consume immediately).
 - Dashboard pages: Home, Feed, Spending Profile (Recharts + one embedded Atlas Chart), Wishlist, Mandates, Rewards, Timekeeper, Chat panel; `/admin` UI.
-- **Cloudforce Side Kick** (F9) in Purple — build and post early Saturday.
 - Demo video, slides, Devpost write-up, SideShift startup angle (creator-video → affiliate distribution).
 
 ### Integration points (who waits on whom — use mocks until ready)
@@ -285,7 +304,7 @@ interface Embedder  { embed(texts: string[]): Promise<number[][]> }
 | **MVP-0 — Core loop** | **~3–4h** | Dashboard Home shows stats, live Agent Feed (SSE), latest verdict, pending approvals. Extension snap → `/snap` (mock vision + mock/cached prices) → **real Claude Worth-It verdict** in the side panel → Watch. `/admin` price drop → Watcher creates approval → approve on web → `purchase()` via mandate → feed + stats update live. iMessage = console. |
 | **MVP-1 — Real inputs & iMessage** | ~+3–4h | Perceptron vision live; SerpAPI live with cache + Haiku labeling; Atlas Search product resolution; Photon iMessage: approvals (YES/NO), photo intake → snap, verdict summaries; orchestrator + `/chat`. |
 | **MVP-2 — Feature breadth** | ~+3–4h | Rewards Optimizer (+ Vector Search), Smart Pay, Timekeeper (T-Mobile), Spending Profile charts, Wishlist + Mandates pages, region-select + video-frame snap. |
-| **MVP-3 — Polish & submit** | remaining | Motion pass, empty/loading/error states, reduced motion, demo reset reliable, VEYZL before/after, Side Kick posted, pitch + video, track submissions. |
+| **MVP-3 — Polish & submit** | remaining | Motion pass, empty/loading/error states, reduced motion, demo reset reliable, VEYZL before/after, pitch + video, track submissions. |
 | *Stretch* | — | Photon Voice outbound approval call (S1). |
 
 ### MVP-0 scope per workstream

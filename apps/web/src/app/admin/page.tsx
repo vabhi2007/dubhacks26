@@ -31,7 +31,7 @@ function BigButton({
 }) {
   const styles = {
     default: "border border-border bg-surface hover:bg-surface-2",
-    accent: "bg-accent text-on-accent hover:bg-accent-hover",
+    accent: "btn-gold",
     danger: "border border-skip/40 text-skip hover:bg-skip/10",
   }[variant];
   return (
@@ -80,7 +80,7 @@ export default function Admin() {
 
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-8">
-      <h1 className="text-[28px] font-semibold tracking-tight">Demo control</h1>
+      <h1 className="font-serif text-[28px] tracking-tight">Demo control</h1>
       <p className="mt-1 text-sm text-text-muted">Trigger the scripted moments. Hidden from the main nav.</p>
 
       <section className="mt-8">

@@ -6,12 +6,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { AgentEvent, Stats, Verdict } from "@alfred/shared";
-import { fmtUSD } from "@alfred/shared";
+import { fmtUSD, watchTarget } from "@alfred/shared";
 import { events as fxEvents, product as fxProduct, verdict as fxVerdict } from "@alfred/shared/fixtures";
 import { ApprovalCard, type ApprovalState, FeedItem, MoneyStat, VerdictCard } from "@alfred/ui";
 import {
   type ApiError,
   type ApprovalView,
+  type VerdictView,
   type WatchView,
   createWatch,
   getApprovals,
@@ -58,7 +59,7 @@ function StatePill({ children, tone }: { children: React.ReactNode; tone: "accen
 
 export default function Home() {
   const [stats, setStats] = useState<Stats | null>(null);
-  const [liveVerdict, setLiveVerdict] = useState<Verdict | null>(null);
+  const [liveVerdict, setLiveVerdict] = useState<VerdictView | null>(null);
   const [pending, setPending] = useState<ApprovalView[]>([]);
   const [receipts, setReceipts] = useState<ApprovalView[]>([]);
   const [wishlist, setWishlist] = useState<WatchView[]>([]);
@@ -132,7 +133,11 @@ export default function Home() {
   }
 
   async function watch(v: Verdict) {
-    const target = v.math.priceCents;
+    const target = watchTarget(v.math.priceCents, v.math.expectedDropCents);
+    if (target === undefined) {
+      toast.error("No sensible watch target for this price");
+      return;
+    }
     try {
       await createWatch(v.productId, target);
       toast.success(`Watching — buys at ${fmtUSD(target)}`);
@@ -145,7 +150,7 @@ export default function Home() {
 
   // Fixtures only when the agent is unreachable; otherwise live data (possibly empty).
   const feed = offline ? fixtureFeed : events;
-  const verdict = offline ? fxVerdict : liveVerdict;
+  const verdict: VerdictView | null = offline ? fxVerdict : liveVerdict;
 
   // Receipts to show: fetched resolved approvals, minus any still in the pending list.
   const shownReceipts = receipts.filter((r) => !pending.some((p) => p._id === r._id));
@@ -167,7 +172,7 @@ export default function Home() {
     <button
       type="button"
       onClick={() => watch(verdict)}
-      className="rounded-control bg-accent px-4 py-2 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
+      className="btn-gold rounded-control px-4 py-2 text-sm font-medium transition-[filter]"
     >
       Watch for a drop
     </button>
@@ -175,7 +180,7 @@ export default function Home() {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-8">
-      <h1 className="text-[28px] font-semibold tracking-tight">Home</h1>
+      <h1 className="font-serif text-[28px] tracking-tight">Home</h1>
       <p className="mt-1 text-sm text-text-muted">What Alfred has been doing with your money.</p>
 
       <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -192,7 +197,7 @@ export default function Home() {
             {verdict ? (
               <VerdictCard
                 verdict={verdict}
-                product={{ title: verdictProductTitle(verdict.productId) ?? "", imageUrl: undefined }}
+                product={{ title: verdict.product?.title ?? verdictProductTitle(verdict.productId) ?? "", imageUrl: verdict.product?.imageUrl }}
                 actions={verdictCta}
               />
             ) : (
