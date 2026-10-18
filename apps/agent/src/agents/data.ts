@@ -55,6 +55,25 @@ export async function getProducts(ids: string[]): Promise<Product[]> {
   return [...ps, ...(ids.includes(fx.product._id) && !found.has(fx.product._id) ? [fx.product] : [])];
 }
 
+/** Catalog text search for chat ("is the Bambino worth it?"): every query word must hit title, brand, model or key. */
+export async function searchProducts(query: string, limit = 5): Promise<Product[]> {
+  // Alphanumeric words only, so they're safe to use as regexes.
+  const words = query.toLowerCase().match(/[a-z0-9]+/g)?.filter((w) => w.length > 1) ?? [];
+  if (!words.length) return [];
+  const rows = await fromSeed((c) =>
+    c.products
+      .find(
+        { $and: words.map((w) => ({ $or: ["title", "brand", "model", "canonicalKey"].map((f) => ({ [f]: { $regex: w, $options: "i" } })) })) },
+        { projection: { embedding: 0 } },
+      )
+      .limit(limit)
+      .toArray(),
+  );
+  if (rows) return rows;
+  const hay = `${fx.product.title} ${fx.product.brand} ${fx.product.model}`.toLowerCase();
+  return words.every((w) => hay.includes(w)) ? [fx.product] : [];
+}
+
 export async function getOffers(productId: string): Promise<Offer[]> {
   const o = await fromSeed((c) => c.offers.find({ productId }).toArray());
   if (o?.length) return o;
