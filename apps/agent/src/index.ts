@@ -9,6 +9,7 @@ import { core } from "./routes/core";
 import { agents } from "./routes/agents";
 import { snap } from "./routes/snap";
 import { startChangeStreams } from "./core/changeStreams";
+import { startMessaging } from "./messenger";
 
 // Binding to 127.0.0.1 doesn't stop the user's own browser from calling us, so:
 //  - Host must be this machine (blocks DNS rebinding). Anything else — e.g. a tunnel — may only reach /webhooks/photon (DESIGN.md §12).
@@ -44,8 +45,10 @@ app.route("/", agents);
 app.route("/", snap);
 
 // Indexes are A's job (`pnpm --filter @alfred/scripts setup-db`), not every teammate's boot.
-if (env.MONGODB_URI) startChangeStreams().catch((e) => console.error("change streams failed:", e.message));
-else console.warn("MONGODB_URI not set — running on fixtures only");
+if (env.MONGODB_URI) {
+  startChangeStreams().catch((e) => console.error("change streams failed:", e.message));
+  startMessaging();
+} else console.warn("MONGODB_URI not set — running on fixtures only");
 
 serve({ fetch: app.fetch, hostname: "127.0.0.1", port: env.AGENT_PORT }, (i) =>
   console.log(`${APP_NAME} agent on http://127.0.0.1:${i.port}`),
