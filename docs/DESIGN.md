@@ -241,7 +241,7 @@ authorize(mandateId, amountCents, merchantId, category):
 | `GET /products/:id` | A | `{product, offers[] (ranked: new US exact → other new → used/refurb, cheapest first), priceHistory[{ts, priceCents, seller}] (90d, new+exact sellers), latestVerdict \| null, watch \| null, breakEven \| null}` — `breakEven = {priceCents, monthlySavingsCents, months[{month, cumulativeSavingsCents}]}` from the verdict's `relatedSpend12moCents ÷ 12` (same basis as `paybackMonths`). `product.imageUrl` is set only for hand-picked items; otherwise show a monogram |
 | `GET /verdicts/:id` | B | `Verdict` |
 | `GET/POST /wishlist` | B | list / `{productId, targetPriceCents}` |
-| `GET/POST /mandates`, `POST /mandates/:id/revoke` | A | |
+| `GET /mandates` · `POST /mandates` `MandateCreate {label, agent: watcher\|orchestrator\|smart_pay, capCents ≤ $5,000, categories (1–8), days 1–365}` → 201 with an issued virtual card (409 on a duplicate active name) · `POST /mandates/:id/revoke` | A | |
 | `GET /approvals?status=pending`, `POST /approvals/:id` | A | `{decision:'approve'\|'deny', channel}` |
 | `GET /rewards`, `POST /rewards/:programId/enroll` | B | recommendations with $/yr |
 | `GET /timekeeper` | B | `Verdict` (mode timekeeper) for current device |

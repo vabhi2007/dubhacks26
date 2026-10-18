@@ -4,12 +4,12 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { streamSSE } from "hono/streaming";
 import * as fx from "@alfred/shared/fixtures";
-import { AdminAdvanceTime, AdminPriceDrop, Approval, ApprovalDecision, type AgentEvent } from "@alfred/shared";
+import { AdminAdvanceTime, AdminPriceDrop, Approval, ApprovalDecision, MandateCreate, type AgentEvent } from "@alfred/shared";
 import { env } from "../env";
 import { advanceTime, priceDrop, resetDemo } from "../core/admin";
 import { listApprovals, type ApprovalView } from "../core/approvals";
 import { emit, recentEvents } from "../core/events";
-import { listMandates, revokeMandate } from "../core/mandates";
+import { createMandate, listMandates, revokeMandate } from "../core/mandates";
 import { resolveApproval } from "../core/purchase";
 import { subscribe } from "../core/sse";
 import { breakEvenFrom, getProductDetail, rankOffers } from "../core/products";
@@ -75,7 +75,11 @@ core.get("/products/:id", async (c) => {
 });
 
 core.get("/mandates", async (c) => c.json(live ? await listMandates(userId) : fx.mandates));
-core.post("/mandates", (c) => c.json({ todo: "A: create mandate" }, 501));
+core.post("/mandates", async (c) => {
+  const body = MandateCreate.parse(await c.req.json());
+  if (!live) throw new HTTPException(503, { message: "MONGODB_URI not set — can't issue a mandate offline" });
+  return c.json(await createMandate(userId, body), 201);
+});
 core.post("/mandates/:id/revoke", async (c) => {
   const id = c.req.param("id");
   if (live) return c.json(await revokeMandate(id, userId));

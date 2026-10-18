@@ -6,10 +6,12 @@ import { toast } from "sonner";
 import type { Mandate } from "@alfred/shared";
 import { MandateCard } from "@alfred/ui";
 import { type ApiError, getMandates, revokeMandate } from "../../lib/api";
+import { NewMandatePanel } from "../../components/NewMandatePanel";
 
 export default function Mandates() {
   const [mandates, setMandates] = useState<Mandate[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     getMandates().then((r) => setMandates(r.data));
@@ -31,10 +33,29 @@ export default function Mandates() {
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-8">
-      <h1 className="font-serif text-[28px] tracking-tight">Mandates</h1>
-      <p className="mt-1 text-sm text-text-muted">
-        Scoped cards Alfred can spend from — a cap, a scope, an expiry. Revoke any at any time.
-      </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="font-serif text-[28px] tracking-tight">Mandates</h1>
+          <p className="mt-1 text-sm text-text-muted">
+            Scoped cards Alfred can spend from — a cap, a scope, an expiry. Revoke any at any time.
+          </p>
+        </div>
+        {!creating ? (
+          <button type="button" onClick={() => setCreating(true)} className="btn-gold shrink-0 px-4 py-2 text-sm font-medium">
+            + New mandate
+          </button>
+        ) : null}
+      </div>
+
+      {creating ? (
+        <NewMandatePanel
+          onCancel={() => setCreating(false)}
+          onCreated={(m) => {
+            setCreating(false);
+            setMandates((ms) => [m, ...(ms ?? [])]);
+          }}
+        />
+      ) : null}
 
       {mandates === null ? null : mandates.length ? (
         <div className="stagger mt-6 grid gap-4 sm:grid-cols-2">
@@ -44,7 +65,7 @@ export default function Mandates() {
         </div>
       ) : (
         <div className="mt-6 rounded-card border border-border bg-surface p-6 text-sm text-text-muted">
-          No mandates yet. Alfred creates one when you let it watch or buy something.
+          No mandates yet. Issue one to let Alfred buy within limits you set.
         </div>
       )}
     </div>

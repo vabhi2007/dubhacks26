@@ -285,6 +285,17 @@ export const Stats = z.object({
 export const AdminPriceDrop = z.object({ productId: z.string(), newPriceCents: Cents });
 export const AdminAdvanceTime = z.object({ days: z.number().int().positive() });
 
+/** POST /mandates — issue a new scoped virtual card to an agent (DESIGN.md F3). The server picks last4 + token. */
+export const MANDATE_CAP_LIMIT_CENTS = 5_000_00;
+export const MandateCreate = z.object({
+  label: z.string().trim().min(1).max(40),
+  agent: z.enum(["watcher", "orchestrator", "smart_pay"]).default("watcher"),
+  capCents: Cents.positive().max(MANDATE_CAP_LIMIT_CENTS),
+  categories: z.array(Category).min(1).max(8),
+  merchants: z.array(z.string()).max(20).default([]),
+  days: z.number().int().min(1).max(365).default(30),
+});
+
 // ---------- inferred types ----------
 export type User = z.infer<typeof User>;
 export type Transaction = z.infer<typeof Transaction>;
@@ -296,6 +307,7 @@ export type Offer = z.infer<typeof Offer>;
 export type PricePoint = z.infer<typeof PricePoint>;
 export type WishlistItem = z.infer<typeof WishlistItem>;
 export type Mandate = z.infer<typeof Mandate>;
+export type MandateCreate = z.infer<typeof MandateCreate>;
 export type Approval = z.infer<typeof Approval>;
 export type Order = z.infer<typeof Order>;
 export type RewardsProgram = z.infer<typeof RewardsProgram>;
