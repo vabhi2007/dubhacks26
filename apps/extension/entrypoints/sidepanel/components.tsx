@@ -21,7 +21,7 @@ export function VerdictCard({ verdict }: { verdict: Verdict }) {
     <section className="rounded-card border border-border bg-surface p-5">
       <div className="flex items-center justify-between">
         <VerdictBadge kind={verdict.kind} />
-        <span className="num text-2xl text-accent">{fmtUSD(math.priceCents)}</span>
+        {math.priceCents > 0 && <span className="num text-2xl text-accent">{fmtUSD(math.priceCents)}</span>}
       </div>
       <p className="mt-3 text-base font-medium leading-snug">{verdict.headline}</p>
       <ul className="mt-3 flex flex-col gap-1.5 text-sm text-text-muted">
@@ -29,7 +29,7 @@ export function VerdictCard({ verdict }: { verdict: Verdict }) {
           <li key={r} className="flex gap-2"><span aria-hidden className="text-accent">•</span>{r}</li>
         ))}
       </ul>
-      {(math.paybackMonths != null || math.expectedDropCents) && (
+      {(math.paybackMonths != null || !!math.expectedDropCents) && (
         <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-border pt-3 text-xs">
           {math.paybackMonths != null && <Stat label="Payback" value={`${math.paybackMonths} mo`} />}
           {!!math.expectedDropCents && <Stat label="Likely drop" value={fmtUSD(math.expectedDropCents)} />}
@@ -95,10 +95,11 @@ function Chip({ children }: { children: ReactNode }) {
 
 type WatchState = { kind: "idle" | "saving" | "done" } | { kind: "error"; message: string };
 
-/** POST /wishlist (B). Target: the price we expect it to drop to, else today's best price. */
+/** POST /wishlist (B). Target: the price we expect it to drop to, else today's best price (never ≤ $0). */
 export function WatchButton({ agentUrl, product, verdict }: { agentUrl: string; product: Product; verdict: Verdict }) {
   const [state, setState] = useState<WatchState>({ kind: "idle" });
-  const target = verdict.math.priceCents - (verdict.math.expectedDropCents ?? 0);
+  const { priceCents, expectedDropCents: drop = 0 } = verdict.math;
+  const target = drop > 0 && drop < priceCents ? priceCents - drop : priceCents;
 
   const watch = async () => {
     setState({ kind: "saving" });
