@@ -28,10 +28,12 @@ snap.post(
     const t0 = Date.now();
     const detection = await vision.detect(img);
     const tVision = Date.now() - t0;
-    const { product, identified, via } = await resolveProduct(detection, img);
+    const { product: resolved, identified, via } = await resolveProduct(detection, img);
     const tResolve = Date.now() - t0 - tVision;
+    const priced = await findOffers(resolved);
+    const product = priced.product; // a product Claude named may have just been saved with live prices
+    const offers = rankOffers(priced.offers);
     const inCatalog = identified && !product._id.startsWith(NEW_PRODUCT_PREFIX);
-    const offers = rankOffers(await findOffers(product));
     const { verdict, saved } = await getVerdict({ userId, product, offers, surface: req.source });
     console.log(`snap: ${product._id} · ${offers.length} offers · ${verdict.kind}${saved ? "" : " (neutral)"} · vision ${tVision}ms · resolve ${tResolve}ms (${via}) · total ${Date.now() - t0}ms`);
 
