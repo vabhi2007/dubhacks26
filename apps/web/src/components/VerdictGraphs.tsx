@@ -7,7 +7,8 @@ import { useEffect, useState } from "react";
 import { fmtUSD, type Verdict } from "@alfred/shared";
 import { cn } from "@alfred/ui";
 import { getProductDetail, type ProductDetail } from "../lib/api";
-import { BreakEvenChart, OffersStrip, PriceHistoryChart } from "./productCharts";
+import { OfferBars } from "./OfferBars";
+import { BreakEvenChart, PriceHistoryChart } from "./productCharts";
 import { TimekeeperChart } from "./TimekeeperChart";
 
 // Whole dollars in captions ("$53/mo", "$30 above"); fmtUSD keeps cents under $100. Smart Pay keeps cents.
@@ -70,7 +71,7 @@ function WorthItGraphs({ verdict }: { verdict: Verdict }) {
         </Graph>
       ) : null}
       <Graph title="Offers" caption={offersCaption(verdict, detail)}>
-        <OffersStrip offers={detail.offers} />
+        <OfferBars offers={detail.offers} bestOfferId={m.bestOfferId} />
       </Graph>
     </Row>
   );
@@ -102,8 +103,8 @@ function offersCaption(verdict: Verdict, detail: ProductDetail): string {
   const best = detail.offers.find((o) => o._id === verdict.math.bestOfferId) ?? detail.offers[0];
   if (!best) return "No offers found.";
   const back = verdict.smartPay ? ` · +${fmtUSD(verdict.smartPay.rewardCents)} back with Smart Pay` : "";
-  const cheaper = detail.offers.filter((o) => o.condition !== "new" && o.priceCents < best.priceCents).sort((a, b) => a.priceCents - b.priceCents)[0];
-  return `Best: ${usd(best.priceCents)} ${best.condition} at ${best.seller}${back}.${cheaper ? ` ${cheaper.condition === "used" ? "Used" : "Refurb"} from ${usd(cheaper.priceCents)}.` : ""}`;
+  // The bars already show every seller and condition; the caption names the pick and what paying smart adds.
+  return `Best ${best.condition === "new" ? "new " : ""}price: ${usd(best.priceCents)} at ${best.seller}${back}.`;
 }
 
 function tradeInCaption(tk: NonNullable<Verdict["timekeeper"]>): string {
