@@ -31,7 +31,7 @@ export default function Mandates() {
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-8">
-      <h1 className="text-[28px] font-semibold tracking-tight">Mandates</h1>
+      <h1 className="font-serif text-[28px] tracking-tight">Mandates</h1>
       <p className="mt-1 text-sm text-text-muted">
         Scoped cards Alfred can spend from — a cap, a scope, an expiry. Revoke any at any time.
       </p>

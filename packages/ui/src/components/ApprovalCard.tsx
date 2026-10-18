@@ -132,7 +132,9 @@ export function ApprovalCard({
 
   return (
     <div className={cn("rounded-card border border-accent/30 bg-surface p-6", className)}>
-      <div className="text-xs uppercase tracking-wide text-accent">Approval needed · {approval.shortCode}</div>
+      <div className="text-xs uppercase tracking-wide text-accent">
+        Approval needed · <span className="font-mono">{approval.shortCode}</span>
+      </div>
       <p className="mt-2 text-lg">
         {isEnroll ? (
           <>Enroll in {title}?</>
@@ -148,7 +150,7 @@ export function ApprovalCard({
           type="button"
           onClick={decide(onApprove)}
           disabled={busy || acted}
-          className="flex-1 rounded-control bg-accent px-4 py-2 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50"
+          className="btn-gold flex-1 rounded-control px-4 py-2 text-sm font-medium transition-[filter] disabled:opacity-50"
         >
           {isEnroll ? "Enroll" : "Approve"}
         </button>
