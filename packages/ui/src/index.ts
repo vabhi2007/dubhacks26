@@ -7,3 +7,4 @@ export * from "./components/VerdictCard";
 export * from "./components/ApprovalCard";
 export * from "./components/FeedItem";
 export * from "./components/MoneyStat";
+export * from "./components/MandateCard";

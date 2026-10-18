@@ -1,7 +1,7 @@
 // Typed client for the agent service (DESIGN.md §8.3).
 // Routes may be absent (connection refused) or stubbed (501) while teammates build —
 // readers fall back to @alfred/shared fixtures so the dashboard always renders.
-import type { Approval, ApprovalDecision, Order, Stats, Verdict } from "@alfred/shared";
+import type { Approval, ApprovalDecision, Mandate, Order, Stats, Verdict } from "@alfred/shared";
 import * as fx from "@alfred/shared/fixtures";
 
 export const AGENT_URL = process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8787";
@@ -84,6 +84,10 @@ export const resolveApproval = (id: string, decision: ApprovalDecision["decision
     method: "POST",
     body: JSON.stringify({ decision, channel: "web" } satisfies ApprovalDecision),
   });
+
+export const getMandates = () => withFallback<Mandate[]>(() => api("/mandates"), fx.mandates);
+
+export const revokeMandate = (id: string) => api<Mandate>(`/mandates/${id}/revoke`, { method: "POST" });
 
 export const adminPriceDrop = (body: { productId: string; newPriceCents: number }) =>
   api("/admin/price-drop", { method: "POST", body: JSON.stringify(body) });
