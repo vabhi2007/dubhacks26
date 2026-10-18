@@ -12,6 +12,7 @@ import { ApprovalCard, type ApprovalState, FeedItem, MoneyStat, VerdictCard } fr
 import {
   type ApiError,
   type ApprovalView,
+  getLatestVerdict,
   getPendingApprovals,
   getStats,
   getVerdict,
@@ -72,11 +73,14 @@ export default function Home() {
   useEffect(() => {
     reloadStats();
     reloadApprovals();
+    // Latest verdict on first load; live `verdict` events keep it fresh below. Stays null when
+    // live-but-empty or offline, so the empty state / fixture fallback apply.
+    getLatestVerdict().then((v) => v && setLiveVerdict(v));
   }, [reloadStats, reloadApprovals]);
 
   // Scripted demo: /admin price drop → approval_requested → the approval appears here without a
   // manual refresh; approve → approval_resolved/purchase → stats + feed update live. The latest
-  // verdict comes from the newest verdict event (no list route yet — see getVerdict TODO).
+  // verdict refreshes from each new verdict event.
   useAgentEvent((e) => {
     if (RELOAD_ON.has(e.type)) {
       reloadStats();
