@@ -1,12 +1,32 @@
-// Owner: C. Toolbar click opens the side panel; Alt+Shift+S captures the visible tab and hands it to the panel.
-// TODO(C): region-select overlay (content script) before capture; video-frame snap.
+// Owner: C. Toolbar click opens the side panel. Alt+Shift+S opens it and injects the snap overlay (overlay.ts); the
+// selection comes back here, we capture the visible tab, and the panel crops to it. Pages the extension can't script
+// (chrome://, the Web Store) fall back to capturing the whole tab.
+import type { Selection } from "../lib/selection";
+import type { OverlayMessage } from "./overlay";
+
+export type PendingSnap = { dataUrl: string; pageUrl?: string; at: number; selection?: Selection };
+
 export default defineBackground(() => {
   browser.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
 
   browser.commands.onCommand.addListener(async (command, tab) => {
-    if (command !== "snap" || !tab?.windowId) return;
+    if (command !== "snap" || !tab?.id || !tab.windowId) return;
     await browser.sidePanel.open({ windowId: tab.windowId });
-    const dataUrl = await browser.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 90 });
-    await browser.storage.session.set({ pendingSnap: { dataUrl, pageUrl: tab.url, at: Date.now() } });
+    try {
+      await browser.scripting.executeScript({ target: { tabId: tab.id }, files: ["/overlay.js"] });
+    } catch {
+      await capture(tab.windowId, tab.url);
+    }
+  });
+
+  browser.runtime.onMessage.addListener((msg: OverlayMessage, sender) => {
+    if (msg?.type === "alfred:selection" && sender.tab?.windowId) void capture(sender.tab.windowId, sender.tab.url, msg.selection);
+    // "alfred:cancel": nothing was captured; the panel keeps showing whatever it had.
   });
 });
+
+async function capture(windowId: number, pageUrl: string | undefined, selection?: Selection) {
+  const dataUrl = await browser.tabs.captureVisibleTab(windowId, { format: "jpeg", quality: 90 });
+  const snap: PendingSnap = { dataUrl, pageUrl, at: Date.now(), ...(selection && { selection }) };
+  await browser.storage.session.set({ pendingSnap: snap });
+}
