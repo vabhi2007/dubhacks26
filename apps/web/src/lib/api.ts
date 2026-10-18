@@ -57,12 +57,16 @@ export const getStats = () => withFallback<Stats>(() => api("/stats"), fx.stats)
 export const getPendingApprovals = () =>
   withFallback<ApprovalView[]>(() => api("/approvals?status=pending"), [fixtureApprovalView]);
 
-// No list route for verdicts yet (GET /verdicts/:id only) — seed with the fixture;
-// live verdicts arrive over the /events SSE stream.
-export const getLatestVerdict = async (): Promise<{ data: Verdict; live: boolean }> => ({
-  data: fx.verdict,
-  live: false,
-});
+// There's no verdict list route yet (GET /verdicts/:id only). Home derives the latest verdict
+// from the newest `verdict` event's verdictId and fetches it here. Returns null on 404/offline.
+// TODO(B): a GET /verdicts?limit=1 would let Home show the latest verdict on first load too.
+export async function getVerdict(id: string): Promise<Verdict | null> {
+  try {
+    return await api<Verdict>(`/verdicts/${id}`);
+  } catch {
+    return null;
+  }
+}
 
 export const resolveApproval = (id: string, decision: ApprovalDecision["decision"]) =>
   api<{ approval: Approval; order?: Order }>(`/approvals/${id}`, {
