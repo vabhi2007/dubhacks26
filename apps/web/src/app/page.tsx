@@ -1,20 +1,26 @@
 "use client";
 // Home — MVP-0 core loop surface (DESIGN.md §10). Stats, latest verdict, pending
 // approvals (Approve/Deny → POST /approvals/:id), and the live Agent Feed.
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { Approval, Stats, Verdict } from "@alfred/shared";
+import type { AgentEvent, Stats, Verdict } from "@alfred/shared";
 import { fmtUSD } from "@alfred/shared";
-import { product as fxProduct, mandates as fxMandates, verdict as fxVerdict } from "@alfred/shared/fixtures";
+import { product as fxProduct } from "@alfred/shared/fixtures";
 import { ApprovalCard, type ApprovalState, FeedItem, MoneyStat, VerdictCard } from "@alfred/ui";
-import { getLatestVerdict, getPendingApprovals, getStats, resolveApproval } from "../lib/api";
-import { useEvents } from "../lib/useEvents";
+import {
+  type ApiError,
+  type ApprovalView,
+  getLatestVerdict,
+  getPendingApprovals,
+  getStats,
+  resolveApproval,
+} from "../lib/api";
+import { useAgentEvent, useEvents } from "../lib/useEvents";
 
-// Fixture-backed lookups for display fields the approvals route doesn't inline yet.
-const productTitle = (id?: string) => (id === fxProduct._id ? fxProduct.title : undefined);
-const cardLast4 = (mandateId?: string) => fxMandates.find((m) => m._id === mandateId)?.card.last4;
-const rewardFor = (a: Approval) =>
-  a.productId === fxVerdict.productId ? fxVerdict.smartPay?.rewardCents : undefined;
+// Events that change the stats/approvals the demo watches — including the reset's "message".
+const RELOAD_ON = new Set<AgentEvent["type"]>(["approval_requested", "approval_resolved", "purchase", "message"]);
+
+const verdictProductTitle = (id?: string) => (id === fxProduct._id ? fxProduct.title : undefined);
 
 function CountStat({ label, value }: { label: string; value: number }) {
   return (
@@ -32,28 +38,65 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 export default function Home() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [verdict, setVerdict] = useState<Verdict | null>(null);
-  const [approvals, setApprovals] = useState<Approval[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalView[]>([]);
   const [states, setStates] = useState<Record<string, ApprovalState>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const { events } = useEvents();
 
-  useEffect(() => {
+  const statesRef = useRef(states);
+  statesRef.current = states;
+
+  const reloadStats = useCallback(() => {
     getStats().then((r) => setStats(r.data));
-    getLatestVerdict().then((r) => setVerdict(r.data));
-    getPendingApprovals().then((r) => setApprovals(r.data));
+  }, []);
+  const reloadApprovals = useCallback(() => {
+    getPendingApprovals().then((r) => {
+      setApprovals((prev) => {
+        // Keep approvals we've already resolved locally so their Receipt stays visible after
+        // they drop out of the pending list.
+        const resolvedShown = prev.filter((a) => statesRef.current[a._id] && !r.data.some((n) => n._id === a._id));
+        return [...resolvedShown, ...r.data];
+      });
+    });
   }, []);
 
-  async function decide(a: Approval, decision: "approve" | "deny") {
+  useEffect(() => {
+    reloadStats();
+    reloadApprovals();
+    getLatestVerdict().then((r) => setVerdict(r.data));
+  }, [reloadStats, reloadApprovals]);
+
+  // Scripted demo: /admin price drop → approval_requested → the approval appears here without a
+  // manual refresh; approve → approval_resolved/purchase → stats + feed update live.
+  useAgentEvent((e) => {
+    if (!RELOAD_ON.has(e.type)) return;
+    reloadStats();
+    reloadApprovals();
+  });
+
+  async function decide(a: ApprovalView, decision: "approve" | "deny") {
     const next: ApprovalState = decision === "approve" ? "approved" : "denied";
     setBusyId(a._id);
     setStates((s) => ({ ...s, [a._id]: next }));
     try {
       await resolveApproval(a._id, decision);
       toast.success(decision === "approve" ? `Approved ${fmtUSD(a.amountCents)}` : "Declined");
-      getStats().then((r) => setStats(r.data));
-    } catch {
-      // Route not live yet — keep the optimistic state so the demo still reads well.
-      toast.message("Agent offline — showing mock outcome", { description: `${decision} ${a.shortCode}` });
+      reloadStats();
+    } catch (err) {
+      const { status, body } = err as ApiError;
+      if (status == null) {
+        // No response at all → agent offline. Keep the optimistic outcome so the demo still reads.
+        toast.message("Agent offline — showing mock outcome", { description: `${decision} ${a.shortCode}` });
+      } else {
+        // The agent answered with an error (e.g. 409 expired). Undo the optimistic receipt and surface it.
+        setStates((s) => {
+          const n = { ...s };
+          delete n[a._id];
+          return n;
+        });
+        toast.error(`Couldn't ${decision} ${a.shortCode} — ${body || `error ${status}`}`);
+        reloadApprovals();
+      }
     } finally {
       setBusyId(null);
     }
@@ -78,7 +121,7 @@ export default function Home() {
             {verdict ? (
               <VerdictCard
                 verdict={verdict}
-                product={{ title: productTitle(verdict.productId) ?? "", imageUrl: undefined }}
+                product={{ title: verdictProductTitle(verdict.productId) ?? "", imageUrl: undefined }}
                 actions={
                   <button
                     type="button"
@@ -100,9 +143,10 @@ export default function Home() {
                   <ApprovalCard
                     key={a._id}
                     approval={a}
-                    product={{ title: productTitle(a.productId) ?? "this purchase" }}
-                    cardLast4={cardLast4(a.mandateId)}
-                    rewardCents={rewardFor(a)}
+                    product={{ title: a.product?.title ?? "this purchase" }}
+                    cardBrand={a.cardBrand}
+                    cardLast4={a.cardLast4}
+                    rewardCents={a.rewardCents}
                     state={states[a._id]}
                     busy={busyId === a._id}
                     onApprove={() => decide(a, "approve")}

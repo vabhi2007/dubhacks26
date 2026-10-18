@@ -4,7 +4,7 @@
 // during the demo (CONTRIBUTING "Shared database"). This is the UI; D does not run them.
 import { useState } from "react";
 import { toast } from "sonner";
-import { adminPriceDrop, adminReset } from "../../lib/api";
+import { adminPriceDrop, adminReset, type ApiError } from "../../lib/api";
 
 type Drop = { productId: string; label: string; newPriceCents: number };
 
@@ -14,11 +14,9 @@ const HERO_DROPS: Drop[] = [
   { productId: "prd_iphone17", label: "iPhone → $699", newPriceCents: 699_00 },
 ];
 
-const FLAGS = [
-  { name: "PRICE_SOURCE", value: "mock" },
-  { name: "VISION_SOURCE", value: "claude" },
-  { name: "MESSENGER", value: "console" },
-];
+// A refusal from a running agent (403/503/404) carries a message — show it instead of "offline".
+const errorMessage = (e: ApiError, offline: string) =>
+  e.status == null ? offline : e.body || `Failed (${e.status})`;
 
 function BigButton({
   children,
@@ -51,26 +49,30 @@ function BigButton({
 export default function Admin() {
   const [busy, setBusy] = useState<string | null>(null);
 
+  const anyBusy = busy !== null;
+
   async function drop(d: Drop) {
+    if (anyBusy) return;
     setBusy(d.label);
     try {
       await adminPriceDrop({ productId: d.productId, newPriceCents: d.newPriceCents });
       toast.success(`Price dropped: ${d.label}`);
-    } catch {
-      toast.error("Agent offline — price drop not sent");
+    } catch (e) {
+      toast.error(errorMessage(e as ApiError, "Agent offline — price drop not sent"));
     } finally {
       setBusy(null);
     }
   }
 
   async function reset() {
+    if (anyBusy) return;
     if (!confirm("Reset the demo persona? This writes to the shared Atlas db.")) return;
     setBusy("reset");
     try {
       await adminReset();
       toast.success("Persona reset");
-    } catch {
-      toast.error("Agent offline — reset not sent");
+    } catch (e) {
+      toast.error(errorMessage(e as ApiError, "Agent offline — reset not sent"));
     } finally {
       setBusy(null);
     }
@@ -85,7 +87,7 @@ export default function Admin() {
         <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-muted">Price drop</h2>
         <div className="grid gap-3 sm:grid-cols-3">
           {HERO_DROPS.map((d) => (
-            <BigButton key={d.label} onClick={() => drop(d)} busy={busy === d.label} variant="accent">
+            <BigButton key={d.label} onClick={() => drop(d)} busy={anyBusy} variant="accent">
               {d.label}
             </BigButton>
           ))}
@@ -97,25 +99,18 @@ export default function Admin() {
 
       <section className="mt-8">
         <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-muted">Persona</h2>
-        <BigButton onClick={reset} busy={busy === "reset"} variant="danger">
+        <BigButton onClick={reset} busy={anyBusy} variant="danger">
           Reset persona
         </BigButton>
       </section>
 
       <section className="mt-8">
-        <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-muted">Current flags</h2>
-        <div className="flex flex-wrap gap-2">
-          {FLAGS.map((f) => (
-            <span
-              key={f.name}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 py-1.5 text-xs"
-            >
-              <span className="text-text-muted">{f.name}</span>
-              <span className="num text-accent">{f.value}</span>
-            </span>
-          ))}
-        </div>
-        <p className="mt-2 text-xs text-text-muted">Set in the root <code>.env</code>; restart the agent to change.</p>
+        <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-muted">Agent flags</h2>
+        <p className="text-sm text-text-muted">
+          <code>PRICE_SOURCE</code>, <code>VISION_SOURCE</code> and <code>MESSENGER</code> are set in the agent&rsquo;s
+          root <code>.env</code>. The dashboard can&rsquo;t read them — run <code>pnpm check:env</code> to see the
+          active values.
+        </p>
       </section>
     </div>
   );
