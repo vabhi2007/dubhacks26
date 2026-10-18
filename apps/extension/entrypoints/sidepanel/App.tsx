@@ -4,27 +4,33 @@ import { useEffect, useRef, useState } from "react";
 import { APP_NAME, SnapResponse } from "@alfred/shared";
 import { OfferList, ProductHeader, SimilarList, VerdictCard, WatchButton } from "./components";
 import { useWatchStatus } from "./watchStatus";
+import { toImageRect, type Selection } from "../../lib/selection";
+import type { PendingSnap } from "../background";
 
 const AGENT_URL = import.meta.env.WXT_AGENT_URL ?? "http://localhost:8787";
 
-type PendingSnap = { dataUrl: string; pageUrl?: string; at: number };
 
 // Vision models gain nothing past ~1568px on the long edge; smaller uploads are faster and stay under API image limits.
 const MAX_EDGE = 1568;
 // Agent: vision ≤ 12s budget + Worth-It ≈ 8–10s. Past this, say so instead of showing the skeleton forever.
 const SNAP_TIMEOUT_MS = 45_000;
 
-/** Downscale a captured frame to a JPEG and return its base64 (no data: prefix). */
-async function toUploadBase64(dataUrl: string): Promise<string> {
+/**
+ * Crop a captured frame to the overlay's selection (if any), downscale, and encode as JPEG.
+ * Returns the base64 to upload (no data: prefix) and an object URL of the same image for the "looking it up" preview.
+ */
+async function prepareUpload(dataUrl: string, selection?: Selection): Promise<{ image: string; preview: string }> {
   const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob());
-  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-  const canvas = new OffscreenCanvas(Math.round(bitmap.width * scale), Math.round(bitmap.height * scale));
-  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const src = selection ? toImageRect(selection.rect, selection.viewport, bitmap) : { x: 0, y: 0, w: bitmap.width, h: bitmap.height };
+  const scale = Math.min(1, MAX_EDGE / Math.max(src.w, src.h));
+  const canvas = new OffscreenCanvas(Math.max(1, Math.round(src.w * scale)), Math.max(1, Math.round(src.h * scale)));
+  canvas.getContext("2d")!.drawImage(bitmap, src.x, src.y, src.w, src.h, 0, 0, canvas.width, canvas.height);
   bitmap.close();
-  const bytes = new Uint8Array(await (await canvas.convertToBlob({ type: "image/jpeg", quality: 0.85 })).arrayBuffer());
+  const blob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.85 });
+  const bytes = new Uint8Array(await blob.arrayBuffer());
   let bin = "";
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(bin);
+  return { image: btoa(bin), preview: URL.createObjectURL(blob) };
 }
 type Status = { kind: "idle" } | { kind: "snapping"; preview: string } | { kind: "error"; message: string };
 
@@ -35,6 +41,7 @@ export default function App() {
   const latest = useRef(0);
   const inflight = useRef<AbortController | null>(null);
   const lastSnapAt = useRef<number | null>(null);
+  const lastPreview = useRef<string | null>(null); // object URL of the current preview, released when replaced
 
   useEffect(() => {
     let active = true;
@@ -48,15 +55,18 @@ export default function App() {
       inflight.current = ac;
       await browser.storage.session.remove("pendingSnap");
       setResult(null);
-      setStatus({ kind: "snapping", preview: snap.dataUrl });
       let image: string;
       try {
-        image = await toUploadBase64(snap.dataUrl);
+        const prepared = await prepareUpload(snap.dataUrl, snap.selection);
+        image = prepared.image;
+        if (id !== latest.current) return URL.revokeObjectURL(prepared.preview);
+        if (lastPreview.current) URL.revokeObjectURL(lastPreview.current);
+        lastPreview.current = prepared.preview;
+        setStatus({ kind: "snapping", preview: prepared.preview }); // shows exactly what was selected
       } catch {
         if (id === latest.current) setStatus({ kind: "error", message: "Couldn't process the screenshot. Try snapping again." });
         return;
       }
-      if (id !== latest.current) return;
       const timeout = AbortSignal.timeout(SNAP_TIMEOUT_MS);
       try {
         const res = await fetch(`${AGENT_URL}/snap`, {
