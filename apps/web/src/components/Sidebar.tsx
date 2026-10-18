@@ -17,7 +17,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { APP_NAME } from "@alfred/shared";
-import { cn } from "@alfred/ui";
+import { AlfredMark, cn } from "@alfred/ui";
 
 type IconType = ComponentType<{ size?: number; strokeWidth?: number }>;
 type Item = { href: string; label: string; icon: IconType; soon?: boolean };
@@ -40,7 +40,7 @@ export function Sidebar() {
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-surface">
       <div className="flex h-14 items-center gap-2 px-5">
-        <span className="h-2 w-2 rounded-full bg-accent" />
+        <AlfredMark size={22} title="" className="text-accent" />
         <span className="text-[15px] font-semibold tracking-tight">{APP_NAME}</span>
       </div>
 

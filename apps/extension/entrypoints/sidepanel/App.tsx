@@ -2,6 +2,7 @@
 // Local components use @alfred/ui tokens; swap for D's VerdictCard / OfferRow when they land.
 import { useEffect, useRef, useState } from "react";
 import { APP_NAME, SnapResponse, watchTarget } from "@alfred/shared";
+import { AlfredMark } from "@alfred/ui";
 import { ActivityFeed, OfferStrip, PriceHistory, ProductHeader, SimilarList, VerdictCard, WatchButton } from "./components";
 import { useWatchStatus } from "./watchStatus";
 import { useAgentEvents } from "./agentEvents";
@@ -108,7 +109,10 @@ export default function App() {
   return (
     <main className="flex min-h-screen flex-col gap-4 p-4">
       <header className="flex items-center justify-between">
-        <h1 className="font-serif text-[22px] leading-none">{APP_NAME}</h1>
+        <h1 className="flex items-center gap-2 font-serif text-[22px] leading-none">
+          <AlfredMark size={22} title="" className="text-accent" />
+          {APP_NAME}
+        </h1>
         <kbd className="border border-border px-1.5 py-0.5 font-mono text-[11px] text-text-muted">Alt+Shift+S</kbd>
       </header>
 

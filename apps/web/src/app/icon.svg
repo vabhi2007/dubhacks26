@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1932 1932" fill="currentColor">
+  <style>svg{color:#141414}@media (prefers-color-scheme:dark){svg{color:#FAFAF8}}</style>
+  <!-- Alfred mark: tuxedo (circle with a shirt-front V) under a bow tie. Single color; the V and the gap around the bow are cut out. -->
+  <defs>
+    <path id="wing" d="M817 203C780 155 560 85 435 63C395 57 363 90 363 130V450C363 492 400 525 440 517C580 490 780 430 817 372Z"/>
+    <g id="bow">
+      <use href="#wing"/>
+      <use href="#wing" transform="matrix(-1 0 0 1 1932 0)"/>
+      <rect x="817" y="107" width="298" height="375" rx="48"/>
+    </g>
+    <mask id="cut">
+      <rect width="1932" height="1932" fill="#fff"/>
+      <polygon points="460,300 1472,300 966,1665" fill="#000"/>
+      <rect x="324" y="-10" width="1284" height="310" fill="#000"/>
+      <use href="#bow" fill="#000" stroke="#000" stroke-width="78" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <circle cx="966" cy="966" r="966" mask="url(#cut)"/>
+  <use href="#bow"/>
+</svg>
