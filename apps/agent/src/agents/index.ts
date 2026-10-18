@@ -3,4 +3,5 @@
 export { anthropic } from "./client";
 export { worthIt, type WorthItInput } from "./worthIt";
 export { handleUserMessage, type UserMessage, type AgentReply } from "./orchestrator";
+export { timekeeper, planUpgrade, type TimekeeperPlan } from "./timekeeper";
 export { createWatch, listWatches, checkWatches, startWatcher, type WatchView } from "./watcher";
