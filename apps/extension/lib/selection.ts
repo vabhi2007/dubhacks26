@@ -42,3 +42,17 @@ export function toImageRect(rect: Rect, viewport: Viewport, image: { width: numb
   const y = Math.max(0, Math.round(rect.y * sy));
   return { x, y, w: Math.max(1, Math.min(Math.round(rect.w * sx), image.width - x)), h: Math.max(1, Math.min(Math.round(rect.h * sy), image.height - y)) };
 }
+
+/** The overlap of two rects, or undefined when they don't overlap. */
+export function intersect(a: Rect, b: Rect): Rect | undefined {
+  const x = Math.max(a.x, b.x);
+  const y = Math.max(a.y, b.y);
+  const w = Math.min(a.x + a.w, b.x + b.w) - x;
+  const h = Math.min(a.y + a.h, b.y + b.h) - y;
+  return w > 0 && h > 0 ? { x, y, w, h } : undefined;
+}
+
+export const contains = (r: Rect, x: number, y: number) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+
+/** A video counts when its visible part is a decent share of the screen (not a thumbnail or a tiny ad). */
+export const MIN_VIDEO_SHARE = 0.12;
