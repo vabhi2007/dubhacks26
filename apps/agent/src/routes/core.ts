@@ -1,4 +1,5 @@
-// Owner: A. Platform routes (DESIGN.md §8.3). Without MONGODB_URI, GETs fall back to fixtures and writes return 503.
+// Owner: A. Platform routes (DESIGN.md §8.3). Without MONGODB_URI everything answers from fixtures (writes echo), so
+// web/extension can run the whole approve/deny/revoke loop with no db. Bodies are validated before anything else.
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { streamSSE } from "hono/streaming";
@@ -6,8 +7,8 @@ import * as fx from "@alfred/shared/fixtures";
 import { AdminAdvanceTime, AdminPriceDrop, Approval, ApprovalDecision, type AgentEvent } from "@alfred/shared";
 import { env } from "../env";
 import { priceDrop, resetDemo } from "../core/admin";
-import { listApprovals } from "../core/approvals";
-import { recentEvents } from "../core/events";
+import { listApprovals, type ApprovalView } from "../core/approvals";
+import { emit, recentEvents } from "../core/events";
 import { listMandates, revokeMandate } from "../core/mandates";
 import { resolveApproval } from "../core/purchase";
 import { subscribe } from "../core/sse";
@@ -16,17 +17,29 @@ import { getStats } from "../core/stats";
 export const core = new Hono();
 const userId = env.DEMO_USER_ID;
 const live = Boolean(env.MONGODB_URI);
-const needDb = () => {
-  if (!live) throw new HTTPException(503, { message: "MONGODB_URI not set — running on fixtures" });
-};
+// /admin/reset wipes the db the whole team shares — only enabled where ALLOW_RESET=1 (Workstream A / the demo machine).
+const resetAllowed = process.env.ALLOW_RESET === "1";
 
-// SSE of AgentEvents. On connect, replays recent events oldest-first (`?replay=N`, default 50, 0 = none; or everything
-// after the Last-Event-ID header on reconnect), then streams live. Each message has `id: <event _id>` — dedupe by it.
+const MAX_PENDING_WRITES = 500; // a client that stalls without disconnecting gets cut off instead of buffering forever
+
+// SSE of the demo user's AgentEvents. On connect, replays recent events oldest-first (`?replay=N`, default 50, 0 = none;
+// or the events after the Last-Event-ID header on reconnect), then streams live. Each message has `id: <event _id>` —
+// clients must dedupe by it (replay can overlap live).
 core.get("/events", (c) =>
   streamSSE(c, async (stream) => {
-    const send = (e: AgentEvent) => stream.writeSSE({ id: e._id, event: "agent_event", data: JSON.stringify(e) });
+    let chain = Promise.resolve();
+    let pending = 0;
+    const send = (e: AgentEvent) => {
+      if (++pending > MAX_PENDING_WRITES) return void stream.abort();
+      chain = chain.then(() => stream.writeSSE({ id: e._id, event: "agent_event", data: JSON.stringify(e) })).finally(() => pending--);
+      return chain;
+    };
     let queued: AgentEvent[] | null = []; // live events that arrive while the backlog is being sent
-    const off = subscribe((e) => (queued ? queued.push(e) : void send(e)));
+    const off = subscribe((e) => {
+      if (e.userId !== userId) return;
+      if (queued) queued.push(e);
+      else void send(e);
+    });
     stream.onAbort(() => { off(); });
 
     const replay = Math.min(Number(c.req.query("replay") ?? 50), 200);
@@ -51,31 +64,46 @@ core.get("/stats", async (c) => c.json(live ? await getStats(userId) : fx.stats)
 core.get("/mandates", async (c) => c.json(live ? await listMandates(userId) : fx.mandates));
 core.post("/mandates", (c) => c.json({ todo: "A: create mandate" }, 501));
 core.post("/mandates/:id/revoke", async (c) => {
-  needDb();
-  return c.json(await revokeMandate(c.req.param("id")));
+  const id = c.req.param("id");
+  if (live) return c.json(await revokeMandate(id, userId));
+  const m = fx.mandates.find((x) => x._id === id);
+  if (!m) throw new HTTPException(404, { message: `mandate ${id} not found` });
+  return c.json({ ...m, status: "revoked" });
 });
 
-// Each approval includes `product`, `offer`, `mandate` (when present) so cards can render without extra calls.
+// Each approval also carries `product`, `offer`, `mandate`, `cardLast4`, `rewardCents` (ApprovalView) — same shape on fixtures.
+const fixtureApproval: ApprovalView = { ...fx.approval, agent: "watcher", product: fx.product, offer: fx.offers[0], mandate: fx.mandates[0], cardLast4: "4821", rewardCents: 4_47 };
 core.get("/approvals", async (c) => {
   const q = c.req.query("status");
   const status = q ? Approval.shape.status.parse(q) : undefined;
-  return c.json(live ? await listApprovals(userId, status) : [fx.approval].filter((a) => !status || a.status === status));
+  return c.json(live ? await listApprovals(userId, status) : [fixtureApproval].filter((a) => !status || a.status === status));
 });
 // → { approval, order? } — `order` present when an approved purchase went through.
 core.post("/approvals/:id", async (c) => {
-  needDb();
-  return c.json(await resolveApproval(c.req.param("id"), ApprovalDecision.parse(await c.req.json())));
+  const decision = ApprovalDecision.parse(await c.req.json());
+  if (live) return c.json(await resolveApproval(c.req.param("id"), decision, userId));
+  if (c.req.param("id") !== fx.approval._id) throw new HTTPException(404, { message: `approval ${c.req.param("id")} not found` });
+  const approved = decision.decision === "approve";
+  const approval = { ...fx.approval, status: approved ? "approved" : "denied", resolvedAt: new Date(), channel: decision.channel } as const;
+  const order = { _id: "ord_fixture", userId, productId: fx.product._id, offerId: "ofr_1", mandateId: "mnd_kitchen", cardId: "crd_sig", amountCents: fx.approval.amountCents, rewardEarnedCents: 4_47, ts: new Date() };
+  return c.json(approved ? { approval, order } : { approval });
 });
 
 core.post("/webhooks/photon", (c) => c.json({ todo: "A: inbound iMessage → orchestrator" }, 501));
 
 core.post("/admin/price-drop", async (c) => {
-  needDb();
   const { productId, newPriceCents } = AdminPriceDrop.parse(await c.req.json());
-  return c.json(await priceDrop(userId, productId, newPriceCents));
+  if (live) return c.json(await priceDrop(userId, productId, newPriceCents));
+  const offer = fx.offers.find((o) => o.productId === productId && o.condition === "new");
+  if (!offer) throw new HTTPException(404, { message: `no new US offer for ${productId}` });
+  return c.json({ offer: { ...offer, priceCents: newPriceCents }, previousPriceCents: offer.priceCents });
 });
 core.post("/admin/advance-time", async (c) => c.json({ todo: "A", ...AdminAdvanceTime.parse(await c.req.json()) }, 501));
 core.post("/admin/reset", async (c) => {
-  needDb();
-  return c.json({ ok: true, counts: await resetDemo() });
+  if (!resetAllowed) throw new HTTPException(403, { message: "reset is disabled here — it wipes the shared db. Set ALLOW_RESET=1 only on Workstream A's / the demo machine." });
+  if (!live) throw new HTTPException(503, { message: "MONGODB_URI not set — nothing to reset" });
+  const counts = await resetDemo();
+  // Change streams only see inserts: this tells connected surfaces to refetch.
+  await emit({ userId, agent: "orchestrator", surface: "system", type: "message", summary: "Demo data reset", refs: {} });
+  return c.json({ ok: true, counts });
 });

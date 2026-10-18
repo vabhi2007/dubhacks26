@@ -8,20 +8,28 @@ import { pickCard, rewardFor } from "./cards";
 import { usd } from "./util";
 import { messenger } from "../messenger";
 
-/** Inserts only. Reopens after errors (with backoff), resuming from the last seen change when possible. */
+/**
+ * Inserts only. Reopens after errors (with backoff), resuming from the latest token — kept fresh even on quiet streams via
+ * `resumeTokenChanged`. The token is dropped only if reopening with it fails before the stream initializes.
+ */
 function watchInserts<T extends Document>(name: string, coll: Collection<T>, match: Document, onInsert: (doc: T) => unknown) {
   let resumeAfter: unknown;
   let failures = 0;
   const open = () => {
     const cs = coll.watch<T, ChangeStreamInsertDocument<T>>([{ $match: { operationType: "insert", ...match } }], resumeAfter ? { resumeAfter } : {});
+    let initialized = false;
+    cs.on("init", () => {
+      initialized = true;
+      failures = 0;
+    });
+    cs.on("resumeTokenChanged", (token) => (resumeAfter = token));
     cs.on("change", (ch) => {
       resumeAfter = ch._id;
-      failures = 0;
       Promise.resolve(onInsert(ch.fullDocument as T)).catch((e) => console.error(`[${name}] handler failed:`, (e as Error).message));
     });
     cs.on("error", (e) => {
       failures++;
-      if (failures > 1) resumeAfter = undefined; // token may be stale — start fresh
+      if (!initialized && failures > 1) resumeAfter = undefined; // can't resume from this token — start fresh
       const delay = Math.min(30_000, 1000 * 2 ** failures);
       console.error(`[${name}] change stream error: ${e.message} — reopening in ${delay / 1000}s`);
       cs.close().catch(() => {});
