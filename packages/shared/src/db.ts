@@ -30,21 +30,36 @@ export const COLLECTIONS = {
 
 let client: MongoClient | undefined;
 let dbPromise: Promise<Db> | undefined;
+let failedUntil = 0;
+
+// Fail fast when Atlas is unreachable (bad venue wifi): 2.5s to find a server instead of the driver's 30s, and a failed
+// connect is remembered for 30s so every later read rejects immediately (callers fall back to fixtures) instead of each
+// waiting out its own timeout.
+const SERVER_SELECTION_TIMEOUT_MS = 2_500;
+const FAILED_CONNECT_COOLDOWN_MS = 30_000;
 
 // Memoized so concurrent first calls share one client.
 export function getDb(): Promise<Db> {
+  if (failedUntil && Date.now() >= failedUntil) {
+    dbPromise = undefined;
+    failedUntil = 0;
+  }
   return (dbPromise ??= (async () => {
     const uri = process.env.MONGODB_URI;
     if (!uri) throw new Error("MONGODB_URI is not set");
     // Driver default ignoreUndefined=false on purpose: a filter like { _id: undefined } then matches nothing (null) instead of
     // being dropped to {} and matching an arbitrary doc. To omit undefined optional fields on insert, pass { ignoreUndefined: true }.
-    client = new MongoClient(uri, { appName: "alfred" });
-    await client.connect();
-    return client.db(process.env.MONGODB_DB ?? "alfred");
-  })().catch((e) => {
-    dbPromise = undefined;
-    throw e;
-  }));
+    const c = new MongoClient(uri, { appName: "alfred", serverSelectionTimeoutMS: SERVER_SELECTION_TIMEOUT_MS });
+    try {
+      await c.connect();
+    } catch (e) {
+      await c.close().catch(() => {});
+      failedUntil = Date.now() + FAILED_CONNECT_COOLDOWN_MS;
+      throw e;
+    }
+    client = c;
+    return c.db(process.env.MONGODB_DB ?? "alfred");
+  })());
 }
 
 // For sessions/transactions (e.g. purchase()).
@@ -57,6 +72,7 @@ export async function closeDb() {
   await client?.close();
   client = undefined;
   dbPromise = undefined;
+  failedUntil = 0;
 }
 
 // Ids are prefixed strings (e.g. "prd_x8k2"), not ObjectIds, so they round-trip through JSON/SSE/iMessage cleanly.
