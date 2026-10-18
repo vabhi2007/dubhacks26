@@ -1,7 +1,7 @@
 // Typed client for the agent service (DESIGN.md §8.3).
 // Routes may be absent (connection refused) or stubbed (501) while teammates build —
 // readers fall back to @alfred/shared fixtures so the dashboard always renders.
-import type { Approval, ApprovalDecision, Mandate, Order, Stats, Verdict } from "@alfred/shared";
+import type { Approval, ApprovalDecision, Mandate, Order, Stats, Verdict, WishlistItem } from "@alfred/shared";
 import * as fx from "@alfred/shared/fixtures";
 
 export const AGENT_URL = process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8787";
@@ -93,3 +93,21 @@ export const adminPriceDrop = (body: { productId: string; newPriceCents: number 
   api("/admin/price-drop", { method: "POST", body: JSON.stringify(body) });
 
 export const adminReset = () => api("/admin/reset", { method: "POST" });
+
+// GET /wishlist joins each watch with its product + current best offer (WatchView on the agent).
+export type WatchView = WishlistItem & {
+  product?: { title?: string; imageUrl?: string };
+  bestOffer?: { priceCents: number; seller?: string };
+};
+
+const fixtureWatch: WatchView = {
+  _id: "wsh_fixture",
+  userId: "u_maya",
+  productId: fx.product._id,
+  targetPriceCents: 150_00,
+  status: "watching",
+  product: { title: fx.product.title, imageUrl: fx.product.imageUrl },
+  bestOffer: { priceCents: fx.offers[0].priceCents, seller: fx.offers[0].seller },
+};
+
+export const getWishlist = () => withFallback<WatchView[]>(() => api("/wishlist"), [fixtureWatch]);
