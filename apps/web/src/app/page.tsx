@@ -103,7 +103,7 @@ export default function Home() {
                     product={{ title: productTitle(a.productId) ?? "this purchase" }}
                     cardLast4={cardLast4(a.mandateId)}
                     rewardCents={rewardFor(a)}
-                    state={states[a._id] ?? "pending"}
+                    state={states[a._id]}
                     busy={busyId === a._id}
                     onApprove={() => decide(a, "approve")}
                     onDeny={() => decide(a, "deny")}
