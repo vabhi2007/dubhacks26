@@ -159,7 +159,7 @@ Rules: no 3D, no pie charts with > 6 slices, label the key number directly on th
 ## 7. Data & mock strategy
 
 - **Hero persona `u_maya`**: UW student/young professional, 12 months of transactions (~1.5k rows): daily cafés (~$640/yr total), groceries, Target, Amazon, Spotify/Netflix, phone bill, rideshare. Two backup personas for judges.
-- **Products** (~200 mock + SerpAPI cache). **Hero products frozen**: Breville Bambino (F1/F2 demo) and an iPhone (F8 demo).
+- **Products** (~200 mock + SerpAPI cache). **Hero products frozen**: Breville Bambino Plus BES500 (`prd_bambino_plus`) (F1/F2 demo) and an iPhone (F8 demo).
 - **Price history**: synthetic 90-day series per product (with realistic dips) — SerpAPI never polled by Watcher.
 - **Rewards programs** (~15), **cards & offers** (3 user cards, ~20 card-linked offers), **devices / trade-in curves / plans** (T-Mobile; synthetic).
 - `PRICE_SOURCE`: `live` → SerpAPI (then cache), `cache` → Mongo only, `mock` → mock catalog. Same for `VISION_SOURCE` (`perceptron` → Claude on error | `claude` | `mock`) and `MESSENGER` (`photon` | `console`).
@@ -199,7 +199,7 @@ type Verdict = {
   _id: string; userId: string; productId: string;
   kind: 'buy' | 'wait' | 'skip';
   mode: 'worth_it' | 'timekeeper';
-  headline: string;                 // "Pays for itself in 3.5 months — but wait for Friday"
+  headline: string;                 // "Pays for itself in 9.4 months — but wait for Friday"
   reasons: string[];                // 2–4 plain-language bullets
   math: { priceCents: number; bestOfferId?: string; paybackMonths?: number;
           relatedSpend12moCents?: number; budgetImpactPct?: number;
@@ -317,9 +317,9 @@ interface Embedder  { embed(texts: string[]): Promise<number[][]> }
 
 ## 11. Demo script (3 min)
 1. **Hook:** "Your agent spends like it's your money — because it is."
-2. Text a photo of a café espresso machine to Alfred's iMessage → reply: best new price $179 (vs $249), *"Pays for itself in 3.5 months given your $640/yr at cafés — but it usually drops on weekends. Wait?"* → reply "watch it".
-3. Dashboard: Agent Feed shows snap → verdict → watch (from iMessage). Mandate "Kitchen — $200 cap" visible.
-4. Admin: price drops to $149 → iMessage "Now $149. Buy on your Visa ••4821 (+$4.47 back)? YES/NO" → YES → Approval Card morphs to Receipt on dashboard, savings ticker +$100.
+2. Text a photo of a café espresso machine to Alfred's iMessage → reply: best new price $499.95 (vs $549.95), *"Pays for itself in 9.4 months given your $640/yr at cafés — but it usually drops on weekends. Wait?"* → reply "watch it".
+3. Dashboard: Agent Feed shows snap → verdict → watch (from iMessage). Mandate "Kitchen — $500 cap" visible.
+4. Admin: price drops to $449.95 → iMessage "Now $449.95. Buy on your Visa ••4821 (+$13.50 back)? YES/NO" → YES → Approval Card morphs to Receipt on dashboard, savings ticker +$50.
 5. Extension: pause a YouTube review of an iPhone → Snap → side panel Timekeeper: *"Wait 4 months — your trade-in only drops $40 and you still owe $210."*
 6. Rewards: "Join Starbucks Rewards — ~$54/yr from your habits" → one tap.
 7. Trust: on Mandates, revoke the Kitchen card → drop the price again → Alfred asks instead of buying (guardrails in code, not prompts).

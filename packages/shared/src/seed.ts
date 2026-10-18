@@ -3,7 +3,7 @@
 // dates are relative to today's UTC midnight, so reruns on the same day are identical.
 // Wipes with deleteMany — never drops — so collections, time-series options and search indexes survive. Embeddings
 // already in the db are carried over by _id, so a reset doesn't break Vector Search (re-embed with `pnpm indexes`).
-// Ids match fixtures.ts (u_maya, prd_bambino, ofr_1, mnd_kitchen, crd_sig, …) so fixture-built UIs line up with real data.
+// Ids match fixtures.ts (u_maya, prd_bambino_plus, ofr_1, mnd_kitchen, crd_sig, …) so fixture-built UIs line up with real data.
 import { Faker, en } from "@faker-js/faker";
 import type { Db } from "mongodb";
 import { COLLECTIONS, collections, getDb, merchantIdFor } from "./db";
@@ -68,18 +68,18 @@ function weekendsNear(today: number, centers: number[]) {
 }
 
 function heroCatalog(today: number): ProductSpec[] {
-  const bambinoDips = weekendsNear(today, [77, 49, 21]); // "dipped to $149 three times in 90 days, usually on weekends"
+  const bambinoDips = weekendsNear(today, [77, 49, 21]); // "dipped to $449.95 three times in 90 days, usually on weekends"
   const phoneDip = weekendsNear(today, [49]);
   const flat = (cents: number) => () => cents;
   return [
     {
-      _id: "prd_bambino", title: "Breville Bambino Espresso Machine", brand: "Breville", model: "BES450", category: "kitchen", canonicalKey: "breville-bes450",
+      _id: "prd_bambino_plus", title: "Breville Bambino Plus Espresso Machine", brand: "Breville", model: "BES500", category: "kitchen", canonicalKey: "breville-bes500",
       offers: [ // first three keep fixture ids ofr_1..ofr_3
-        { seller: "Popover Kitchen", condition: "new", price: (d) => (bambinoDips.has(d) ? 149_00 : d > 29 ? 199_95 : d > 12 ? 189_95 : 179_00) },
-        { seller: "Best Buy", condition: "new", price: (d) => (d >= 39 && d <= 45 ? 249_99 : 299_95) },
-        { seller: "eBay", condition: "used", price: (d) => (129 + Math.round(Math.sin(d / 5) * 12)) * 100 },
-        { seller: "Amazon", condition: "new", price: (d) => (bambinoDips.has(d) && d > 30 ? 199_00 : 249_00) },
-        { seller: "Breville", condition: "refurb", price: flat(159_95) },
+        { seller: "Popover Kitchen", condition: "new", price: (d) => (bambinoDips.has(d) ? 449_95 : d > 29 ? 549_95 : d > 12 ? 529_95 : 499_95) },
+        { seller: "Best Buy", condition: "new", price: (d) => (d >= 39 && d <= 45 ? 499_95 : 549_95) },
+        { seller: "eBay", condition: "used", price: (d) => 349_95 + Math.round(Math.sin(d / 5) * 12) * 100 },
+        { seller: "Amazon", condition: "new", price: (d) => (bambinoDips.has(d) && d > 30 ? 499_95 : 529_95) },
+        { seller: "Breville", condition: "refurb", price: flat(399_95) },
       ],
     },
     {
@@ -94,8 +94,8 @@ function heroCatalog(today: number): ProductSpec[] {
       ],
     },
     // similar items (offers only, no price history)
-    { _id: "prd_bambino_plus", title: "Breville Bambino Plus Espresso Machine", brand: "Breville", model: "BES500", category: "kitchen", canonicalKey: "breville-bes500",
-      offers: [{ seller: "Breville", condition: "new", price: flat(499_95), history: false }, { seller: "Amazon", condition: "new", price: flat(429_00), history: false }] },
+    { _id: "prd_bambino", title: "Breville Bambino Espresso Machine", brand: "Breville", model: "BES450", category: "kitchen", canonicalKey: "breville-bes450",
+      offers: [{ seller: "Breville", condition: "new", price: flat(299_95), history: false }, { seller: "Amazon", condition: "new", price: flat(249_00), history: false }] },
     { _id: "prd_stilosa", title: "De'Longhi Stilosa Manual Espresso Machine", brand: "De'Longhi", model: "EC260BK", category: "kitchen", canonicalKey: "delonghi-ec260bk",
       offers: [{ seller: "Amazon", condition: "new", price: flat(99_95), history: false }, { seller: "Target", condition: "new", price: flat(119_99), history: false }] },
     { _id: "prd_gaggia_classic", title: "Gaggia Classic Pro Espresso Machine", brand: "Gaggia", model: "RI9380/46", category: "kitchen", canonicalKey: "gaggia-ri9380-46",

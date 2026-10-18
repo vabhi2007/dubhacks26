@@ -9,8 +9,8 @@ import { adminAdvanceTime, adminPriceDrop, adminReset, type ApiError } from "../
 type Drop = { productId: string; label: string; newPriceCents: number };
 
 const HERO_DROPS: Drop[] = [
-  { productId: "prd_bambino", label: "Bambino → $149", newPriceCents: 149_00 },
-  { productId: "prd_bambino", label: "Bambino → $129", newPriceCents: 129_00 },
+  { productId: "prd_bambino_plus", label: "Bambino Plus → $449.95", newPriceCents: 449_95 },
+  { productId: "prd_bambino_plus", label: "Bambino Plus → $429.95", newPriceCents: 429_95 },
   { productId: "prd_iphone17", label: "iPhone → $699", newPriceCents: 699_00 },
 ];
 

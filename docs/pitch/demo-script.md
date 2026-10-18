@@ -6,8 +6,10 @@
 
 **Setup before you present (not on camera):**
 - Agent service up (`pnpm dev`), web dashboard on `:3100`, extension loaded, iMessage thread with Alfred open on the phone mirrored to screen.
-- Persona reset to `u_maya` (Workstream A runs `/admin/reset`). Confirm Home shows a clean feed and the "Kitchen — $200 cap" mandate.
+- Persona reset to `u_maya` (Workstream A runs `/admin/reset`). Confirm Home shows a clean feed and the "Kitchen — $500 cap" mandate.
 - `PRICE_SOURCE=mock` (or `cache`) so prices are deterministic. Have the admin panel open in a hidden tab.
+- The demo prices are synthetic fixtures, not live retail quotes. The Plus uses `prd_bambino_plus`; the regular BES450 remains a separate catalog item.
+- After updating the seed, Workstream A must reset the demo database before rehearsing; existing data and mandate limits are not changed by restarting the app.
 - Pre-stage the café photo and the YouTube iPhone-review tab.
 
 ---
@@ -17,9 +19,9 @@
 | # | Time | Surface | What the audience sees | Who |
 |---|------|---------|------------------------|-----|
 | 0 | 0:00–0:15 | Slide | **Hook.** "Everyone's building agents that *do* things. We built one you can trust with a credit card. Alfred shops as you — with your money and your rules — and always checks with you first." | Narrator |
-| 1 | 0:15–0:50 | iMessage | Text a **photo of an espresso machine** to Alfred. Reply comes back: *"That's a Breville Bambino. Best new price **$179** (vs $249 at Best Buy). Pays for itself in ~3.5 months given your **$640/yr** at cafés — but it usually dips on weekends. Want me to watch it?"* → reply **"watch it"**. | Driver |
-| 2 | 0:50–1:15 | Dashboard | Switch to Home. The **Agent Feed** already shows the exact same actions from iMessage — snap → verdict → watch — because every surface writes to one feed. Point at the **"Kitchen — $200 cap"** mandate: "Alfred can only spend inside rules I set." | Narrator |
-| 3 | 1:15–1:50 | Admin → iMessage | Hidden tab: **price drops to $149**. On the phone, Alfred pings: *"Bambino just hit **$149**. Buy on your Visa ••4821 (**+$4.47** back)? YES/NO."* Reply **YES**. On the dashboard the **Approval Card morphs into a Receipt** and the **savings ticker jumps +$100**, live. | Driver |
+| 1 | 0:15–0:50 | iMessage | Text a **photo of an espresso machine** to Alfred. Reply comes back: *"That's a Breville Bambino Plus BES500. Best new price **$499.95** (vs $549.95 at Best Buy). Pays for itself in ~9.4 months given your **$640/yr** at cafés — but it usually dips on weekends. Want me to watch it?"* → reply **"watch it"**. | Driver |
+| 2 | 0:50–1:15 | Dashboard | Switch to Home. The **Agent Feed** already shows the exact same actions from iMessage — snap → verdict → watch — because every surface writes to one feed. Point at the **"Kitchen — $500 cap"** mandate: "Alfred can only spend inside rules I set." | Narrator |
+| 3 | 1:15–1:50 | Admin → iMessage | Hidden tab: **price drops to $449.95**. On the phone, Alfred pings: *"Bambino Plus just hit **$449.95**. Buy on your Visa ••4821 (**+$13.50** back)? YES/NO."* Reply **YES**. On the dashboard the **Approval Card morphs into a Receipt** and the **savings ticker jumps +$50**, live. | Driver |
 | 4 | 1:50–2:25 | Extension | Open a **YouTube review of an iPhone**, pause on a frame, hit the **Snap** hotkey, drag a box. Side panel returns a **Timekeeper** verdict: *"**Wait 4 months** — your trade-in only drops $40 and you still owe $210 on financing."* "It's just as willing to tell me **no**." | Driver |
 | 5 | 2:25–2:40 | Dashboard | Rewards: *"Join Starbucks Rewards — ~**$54/yr** from your habits."* One tap to enroll (simulated). "It keeps finding money after checkout." | Narrator |
 | 6 | 2:40–2:55 | Mandates | Trust beat: **revoke** the Kitchen card (it turns grey, REVOKED). Drop the price again from admin → Alfred **asks instead of buying**. "Guardrails live in code, not prompts. Revoke a card and the agent's spending power is gone." | Driver |

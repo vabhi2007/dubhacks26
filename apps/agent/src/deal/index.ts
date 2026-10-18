@@ -21,7 +21,7 @@ export const mockPriceSource: PriceSource = {
 export const priceSource: PriceSource = env.PRICE_SOURCE === "live" ? serpApiSource : mockPriceSource;
 
 /** DESIGN.md §7: the hero products keep their seeded offers and price history so the demo script holds. */
-const FROZEN = new Set(["prd_bambino", "prd_iphone17"]);
+const FROZEN = new Set(["prd_bambino_plus", "prd_iphone17"]);
 const LIVE_PREFIX = LIVE_OFFER_PREFIX; // SerpAPI offers; seeded ones are ofr_*
 const LIVE_TTL_MS = LIVE_OFFER_TTL_MS;
 const PAUSE_MS = 10 * 60_000;

@@ -97,7 +97,7 @@ export const PERSONAS: Persona[] = [
       { _id: "crd_cash", name: "Visa Everyday Cash", last4: "3090", rewards: { groceries: 0.03, transport: 0.02, default: 0.015 } },
     ],
     mandates: [
-      { _id: "mnd_kitchen", agent: "watcher", label: "Kitchen upgrades", capCents: 200_00, spentCents: 0, categories: ["kitchen"], merchants: [], expiresInDays: 44, status: "active", card: { last4: "4821", token: "tok_mock_kitchen" } },
+      { _id: "mnd_kitchen", agent: "watcher", label: "Kitchen upgrades", capCents: 500_00, spentCents: 0, categories: ["kitchen"], merchants: [], expiresInDays: 44, status: "active", card: { last4: "4821", token: "tok_mock_kitchen" } },
       { _id: "mnd_coffee", agent: "smart_pay", label: "Coffee runs", capCents: 60_00, spentCents: 23_40, categories: ["coffee"], merchants: [], expiresInDays: 14, status: "active", card: { last4: "1177", token: "tok_mock_coffee" } },
     ],
     habits: [

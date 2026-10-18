@@ -6,6 +6,7 @@ allowBuilds:
   esbuild: true
   unrs-resolver: true
   protobufjs: false  # via spectrum-ts → grpc; its postinstall is only a version warning
+  pnpm: true
 
 # One React for the whole workspace (Next pins 19.3.0). Mismatched copies crash the extension side panel.
 overrides:

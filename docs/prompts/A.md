@@ -25,7 +25,7 @@ You are building **Alfred** with a team of 4 at DubHacks '26. You own **Workstre
 You unblock everyone: ship a **minimal** seed fast, then grow it.
 
 **MVP-0 — core loop (target: first PR in ~30 min, tier done in ~3h)**
-1. **Minimal seed (`scripts/seed.ts`)** — deterministic, idempotent (wipe + reseed `alfred` db). Only what the loop needs: `u_maya`; 12 months of transactions (cafés ≈ $640/yr plus a few other categories); 3 Visa cards; 2 mandates (see fixtures); hero products Breville Bambino BES450 + an iPhone with offers and 90-day price history with dips. → PR `ws-a/seed-mvp0`.
+1. **Minimal seed (`scripts/seed.ts`)** — deterministic, idempotent (wipe + reseed `alfred` db). Only what the loop needs: `u_maya`; 12 months of transactions (cafés ≈ $640/yr plus a few other categories); 3 Visa cards; 2 mandates (see fixtures); hero products Breville Bambino Plus BES500 + an iPhone with offers and 90-day price history with dips. → PR `ws-a/seed-mvp0`.
 2. **Core routes on Mongo** — `/stats`, `/mandates` (list, revoke), `/approvals` (list, resolve → `purchase()`), `/admin/price-drop` (writes price_history + emits `price_drop`), `/admin/reset` (reseed).
 3. **`purchase()`** in `core/` — `authorize()` + multi-document transaction (order + mandate spend + `purchase` event); decline → emit `mandate_declined` + create approval. Export it for B.
 4. **Live updates** — change streams → `/events` SSE verified end to end; approvals listener → console Messenger.

@@ -13,7 +13,7 @@ export const VISION_BUDGET_MS = 12_000;
 
 export const mockVision: Vision = {
   async detect() {
-    return { objects: [{ label: "espresso machine", bbox: { x: 0.2, y: 0.2, w: 0.5, h: 0.6 }, conf: 0.9 }], ocr: ["Breville", "the Bambino"] };
+    return { objects: [{ label: "espresso machine", bbox: { x: 0.2, y: 0.2, w: 0.5, h: 0.6 }, conf: 0.9 }], ocr: ["Breville", "the Bambino Plus", "BES500"] };
   },
 };
 

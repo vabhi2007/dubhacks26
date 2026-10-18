@@ -116,7 +116,7 @@ const fixtureWatch: WatchView = {
   _id: "wsh_fixture",
   userId: "u_maya",
   productId: fx.product._id,
-  targetPriceCents: 150_00,
+  targetPriceCents: 449_95,
   status: "watching",
   product: { title: fx.product.title, imageUrl: fx.product.imageUrl },
   bestOffer: { priceCents: fx.offers[0].priceCents, seller: fx.offers[0].seller },
@@ -149,14 +149,14 @@ export type ReturnWindow = {
   priceDrop?: { nowCents: number; seller: string; savingsCents: number };
 };
 
-// Offline example: the Bambino bought at $165, now $149 with 22 days left.
+// Offline example: the Bambino Plus bought at $499.95, now $449.95 with 22 days left.
 const fixtureReturns = (): ReturnWindow[] => {
   const D = 86_400_000;
   const bought = Date.now() - 8 * D;
   return [{
     orderId: "ord_fixture", productId: fx.product._id, title: fx.product.title, imageUrl: fx.product.imageUrl, seller: "Popover Kitchen",
-    amountCents: 165_00, boughtAt: new Date(bought).toISOString(), windowDays: 30, returnBy: new Date(bought + 30 * D).toISOString(),
-    daysLeft: 22, status: "open", estimated: true, priceDrop: { nowCents: 149_00, seller: "Popover Kitchen", savingsCents: 16_00 },
+    amountCents: 499_95, boughtAt: new Date(bought).toISOString(), windowDays: 30, returnBy: new Date(bought + 30 * D).toISOString(),
+    daysLeft: 22, status: "open", estimated: true, priceDrop: { nowCents: 449_95, seller: "Popover Kitchen", savingsCents: 50_00 },
   }];
 };
 
@@ -195,7 +195,7 @@ export type ProductDetail = {
 // Deterministic 90-day series (gentle wave + weekend dips, recent slide toward target) for the
 // offline fallback, so the detail charts still read without the agent.
 function synthHistory(): PriceHistoryPoint[] {
-  const base = 179_00;
+  const base = fx.verdict.math.priceCents;
   const today = Date.now();
   return Array.from({ length: 90 }, (_, k) => {
     const i = 89 - k;
@@ -204,7 +204,7 @@ function synthHistory(): PriceHistoryPoint[] {
     const weekend = dow === 0 || dow === 6 ? -20_00 : 0;
     const wave = Math.round(Math.sin(i / 7) * 12_00);
     const recentSlide = i < 10 ? -20_00 : 0;
-    return { ts: ts.toISOString(), priceCents: Math.max(129_00, base + wave + weekend + recentSlide), seller: fx.offers[0].seller };
+    return { ts: ts.toISOString(), priceCents: Math.max(449_95, base + wave + weekend + recentSlide), seller: fx.offers[0].seller };
   });
 }
 
@@ -215,7 +215,7 @@ function fixtureDetail(): ProductDetail {
     offers: fx.offers,
     priceHistory: synthHistory(),
     latestVerdict: fx.verdict,
-    watch: { _id: "wsh_fixture", userId: "u_maya", productId: fx.product._id, targetPriceCents: 150_00, status: "watching" },
+    watch: { _id: "wsh_fixture", userId: "u_maya", productId: fx.product._id, targetPriceCents: 449_95, status: "watching" },
     breakEven: {
       priceCents: fx.verdict.math.priceCents,
       monthlySavingsCents: monthly,

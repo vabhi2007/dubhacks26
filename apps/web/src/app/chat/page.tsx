@@ -20,10 +20,10 @@ const STICK_PX = 80; // within this of the bottom, new text keeps the thread scr
 const WATCH_EVENTS = new Set<AgentEvent["type"]>(["watch_created", "purchase", "message"]);
 
 const SUGGESTIONS = [
-  "Is the Breville Bambino worth it?",
+  "Is the Breville Bambino Plus worth it?",
   "Should I upgrade my iPhone now or wait?",
   "Which rewards programs should I join?",
-  "Watch the Bambino and tell me if it drops",
+  "Watch the Bambino Plus and tell me if it drops",
 ];
 
 function VerdictSkeleton() {
