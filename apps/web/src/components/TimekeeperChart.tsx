@@ -5,6 +5,7 @@
 import { CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useChartEntrance } from "@alfred/ui";
 import { fmtUSD } from "@alfred/shared";
+import { lineTooltip } from "./chartTheme";
 
 type Point = { month: number; valueCents: number };
 
@@ -49,10 +50,7 @@ export function TimekeeperChart({ series, waitMonths, className }: { series: Poi
             ticks={yTicks}
           />
           <Tooltip
-            cursor={{ stroke: "var(--border)" }}
-            contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 0, fontSize: 12 }}
-            labelStyle={{ color: "var(--text-muted)" }}
-            itemStyle={{ color: "var(--text)" }}
+            {...lineTooltip}
             labelFormatter={(m) => (m === 0 ? "Today" : `In ${m} month${m === 1 ? "" : "s"}`)}
             formatter={(v) => [fmtUSD(Number(v) * 100), "Trade-in"]}
           />

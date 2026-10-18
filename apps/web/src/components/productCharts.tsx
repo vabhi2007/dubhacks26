@@ -18,6 +18,7 @@ import type { Offer } from "@alfred/shared";
 import { fmtUSD } from "@alfred/shared";
 import { useChartEntrance } from "@alfred/ui";
 import type { BreakEven, PriceHistoryPoint } from "../lib/api";
+import { barTooltip, lineTooltip } from "./chartTheme";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const dayLabel = (iso: string) => {
@@ -27,16 +28,6 @@ const dayLabel = (iso: string) => {
 const usd = (c: number) => fmtUSD(c, { compact: true });
 
 const axis = { stroke: "var(--border)", tick: { fill: "var(--text-muted)", fontSize: 11 }, tickLine: false } as const;
-const tooltipStyle = {
-  contentStyle: {
-    background: "var(--surface)",
-    border: "1px solid var(--border)",
-    borderRadius: 0,
-    fontSize: 12,
-    color: "var(--text)",
-  },
-  labelStyle: { color: "var(--text-muted)" },
-} as const;
 
 // Price history (90d): best price per day, gold line, dashed target line, dot at today.
 export function PriceHistoryChart({ history, targetCents }: { history: PriceHistoryPoint[]; targetCents?: number }) {
@@ -56,7 +47,7 @@ export function PriceHistoryChart({ history, targetCents }: { history: PriceHist
       <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 4 }}>
         <XAxis dataKey="label" {...axis} interval={Math.ceil(data.length / 5)} minTickGap={16} />
         <YAxis {...axis} width={52} tickFormatter={usd} domain={["dataMin - 1000", "dataMax + 1000"]} />
-        <Tooltip {...tooltipStyle} formatter={(v) => [fmtUSD(Number(v)), "Best price"]} />
+        <Tooltip {...lineTooltip} formatter={(v) => [fmtUSD(Number(v)), "Best price"]} />
         {targetCents != null ? (
           <ReferenceLine
             y={targetCents}
@@ -93,7 +84,7 @@ export function BreakEvenChart({ breakEven }: { breakEven: BreakEven }) {
         <BarChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 4 }}>
           <XAxis dataKey="month" {...axis} tickFormatter={(m: number) => `${m}mo`} interval={Math.ceil(data.length / 6)} />
           <YAxis {...axis} width={52} tickFormatter={usd} />
-          <Tooltip {...tooltipStyle} formatter={(v) => [fmtUSD(Number(v)), "Saved"]} labelFormatter={(m) => `Month ${m}`} />
+          <Tooltip {...barTooltip} formatter={(v) => [fmtUSD(Number(v)), "Saved"]} labelFormatter={(m) => `Month ${m}`} />
           <ReferenceLine
             y={breakEven.priceCents}
             stroke="var(--text-muted)"
