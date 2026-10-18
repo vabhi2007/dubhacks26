@@ -5,7 +5,7 @@ import type { AgentName, Approval, ApprovalDecision, Mandate, Offer, Product, Su
 import { HTTPException } from "hono/http-exception";
 import { pickCard, rewardFor } from "./cards";
 import { emit } from "./events";
-import { isDuplicateKey, usd } from "./util";
+import { isDuplicateKey, OMIT_UNDEFINED, requireId, usd } from "./util";
 
 const TTL_MS = 30 * 60_000;
 const CODE_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -18,12 +18,17 @@ export type ApprovalRequest = {
   offerId: string;
   mandateId?: string; // omit when no mandate can cover it — approving then mints a one-time mandate
   channel?: Approval["channel"];
-  agent?: AgentName;
+  agent?: AgentName; // who is asking; approving charges as this agent
   surface?: Surface;
+  idempotencyKey?: string; // one approval per trigger (e.g. a price_drop event), ever — re-asks return the first
 };
 
+/** Internal fields beyond the frozen Approval contract. */
+export type ApprovalDoc = Approval & { agent?: AgentName; idempotencyKey?: string };
+
 /** Approval plus what ApprovalCard needs: the funding card's last4 and the reward it would earn. */
-export type ApprovalView = Approval & { product?: Product; offer?: Offer; mandate?: Mandate; cardLast4?: string; rewardCents?: number };
+export type ApprovalView = ApprovalDoc & { product?: Product; offer?: Offer; mandate?: Mandate; cardLast4?: string; rewardCents?: number };
+
 
 /** Expiry is enforced in query filters; this flips stale pendings so they stop blocking the dedupe index. */
 async function expireStale(userId: string) {
@@ -42,29 +47,43 @@ async function freeShortCode(userId: string) {
   throw new Error("no free approval short code");
 }
 
-/** Idempotent: an identical pending request (same user, product, offer, amount) returns the existing approval. */
-export async function requestApproval(req: ApprovalRequest): Promise<Approval> {
+/**
+ * Idempotent: an identical pending request (same user, product, offer, amount) returns the existing approval, and a
+ * request with an `idempotencyKey` seen before returns that approval whatever its status (a NO isn't re-asked).
+ */
+export async function requestApproval(req: ApprovalRequest): Promise<ApprovalDoc> {
+  const userId = requireId(req.userId, "userId");
+  const productId = requireId(req.productId, "productId");
+  const offerId = requireId(req.offerId, "offerId");
+  if (!Number.isSafeInteger(req.amountCents) || req.amountCents <= 0) throw new HTTPException(400, { message: "amountCents must be a positive integer" });
   const c = await collections();
-  await expireStale(req.userId);
-  const key = { userId: req.userId, kind: "purchase" as const, status: "pending" as const, productId: req.productId, offerId: req.offerId, amountCents: req.amountCents };
+  const byKey = () => (req.idempotencyKey ? c.approvals.findOne<ApprovalDoc>({ userId, idempotencyKey: req.idempotencyKey }) : null);
+  const prior = await byKey();
+  if (prior) return prior;
+
+  await expireStale(userId);
+  const key = { userId, kind: "purchase" as const, status: "pending" as const, productId, offerId, amountCents: req.amountCents };
   const existing = await c.approvals.findOne(key);
   if (existing) return existing;
 
   for (let attempt = 0; attempt < 3; attempt++) {
-    const approval: Approval = { _id: newId("apr"), ...key, mandateId: req.mandateId, channel: req.channel ?? "imessage", shortCode: await freeShortCode(req.userId), expiresAt: new Date(Date.now() + TTL_MS) };
+    const approval: ApprovalDoc = {
+      _id: newId("apr"), ...key, mandateId: req.mandateId, channel: req.channel ?? "imessage", shortCode: await freeShortCode(userId),
+      expiresAt: new Date(Date.now() + TTL_MS), agent: req.agent ?? "orchestrator", idempotencyKey: req.idempotencyKey,
+    };
     try {
-      await c.approvals.insertOne(approval);
+      await c.approvals.insertOne(approval, OMIT_UNDEFINED);
     } catch (e) {
       if (!isDuplicateKey(e)) throw e;
-      const dup = await c.approvals.findOne(key); // another agent process won the race
+      const dup = (await byKey()) ?? (await c.approvals.findOne(key)); // another agent process won the race
       if (dup) return dup;
       continue; // short-code clash — retry
     }
-    const [product, mandate] = await Promise.all([c.products.findOne({ _id: req.productId }), req.mandateId ? c.mandates.findOne({ _id: req.mandateId }) : null]);
+    const [product, mandate] = await Promise.all([c.products.findOne({ _id: productId }), req.mandateId ? c.mandates.findOne({ _id: req.mandateId, userId }) : null]);
     await emit({
-      userId: req.userId, agent: req.agent ?? "orchestrator", surface: req.surface ?? "system", type: "approval_requested",
+      userId, agent: approval.agent!, surface: req.surface ?? "system", type: "approval_requested",
       summary: `Asked you to approve ${usd(req.amountCents)}${product ? ` for ${product.title}` : ""}${mandate ? ` on Visa ••${mandate.card.last4}` : ""}`,
-      refs: { approvalId: approval._id, productId: req.productId, mandateId: req.mandateId },
+      refs: { approvalId: approval._id, productId, mandateId: req.mandateId },
     });
     return approval;
   }
@@ -74,16 +93,16 @@ export async function requestApproval(req: ApprovalRequest): Promise<Approval> {
 export async function listApprovals(userId: string, status?: Approval["status"]): Promise<ApprovalView[]> {
   await expireStale(userId);
   const c = await collections();
-  const approvals = await c.approvals.find({ userId, ...(status && { status }) }).sort({ expiresAt: -1 }).limit(50).toArray();
-  const ids = (k: "productId" | "offerId" | "mandateId") => [...new Set(approvals.map((a) => a[k]).filter((x): x is string => !!x))];
+  const list = await c.approvals.find<ApprovalDoc>({ userId, ...(status && { status }) }).sort({ expiresAt: -1 }).limit(50).toArray();
+  const ids = (k: "productId" | "offerId" | "mandateId") => [...new Set(list.map((a) => a[k]).filter((x): x is string => !!x))];
   const [products, offers, mandates, cards] = await Promise.all([
     c.products.find({ _id: { $in: ids("productId") } }, { projection: { embedding: 0 } }).toArray(),
     c.offers.find({ _id: { $in: ids("offerId") } }).toArray(),
-    c.mandates.find({ _id: { $in: ids("mandateId") } }).toArray(),
+    c.mandates.find({ _id: { $in: ids("mandateId") }, userId }).toArray(),
     c.cards.find({ userId }).toArray(),
   ]);
-  const by = <T extends { _id: string }>(xs: T[], id?: string) => xs.find((x) => x._id === id);
-  return approvals.map((a) => {
+  const by = <T extends { _id: string }>(xs: T[], id?: string) => (id ? xs.find((x) => x._id === id) : undefined);
+  return list.map(({ idempotencyKey: _, ...a }) => {
     const product = by(products, a.productId);
     const mandate = by(mandates, a.mandateId);
     const card = product && cards.length ? pickCard(cards, product.category, mandate) : undefined;
@@ -94,9 +113,9 @@ export async function listApprovals(userId: string, status?: Approval["status"])
   });
 }
 
-/** Loads a pending, unexpired approval or throws 404/409. */
-export async function pendingApproval(id: string): Promise<Approval> {
-  const a = await (await collections()).approvals.findOne({ _id: id });
+/** Loads the user's pending, unexpired approval or throws 404/409. */
+export async function pendingApproval(id: string, userId: string): Promise<ApprovalDoc> {
+  const a = await (await collections()).approvals.findOne<ApprovalDoc>({ _id: requireId(id, "approvalId"), userId: requireId(userId, "userId") });
   if (!a) throw new HTTPException(404, { message: `approval ${id} not found` });
   if (a.status !== "pending" || a.expiresAt <= new Date())
     throw new HTTPException(409, { message: `approval ${a.shortCode} is ${a.status === "pending" ? "expired" : a.status}` });
@@ -109,7 +128,7 @@ export async function resolveWithoutPurchase(a: Approval, { decision, channel }:
   const status = decision === "approve" ? "approved" : "denied";
   const now = new Date();
   const updated = await c.approvals.findOneAndUpdate(
-    { _id: a._id, status: "pending", expiresAt: { $gt: now } },
+    { _id: a._id, userId: a.userId, status: "pending", expiresAt: { $gt: now } },
     { $set: { status, resolvedAt: now, channel } },
     { returnDocument: "after" },
   );
