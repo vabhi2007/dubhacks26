@@ -32,7 +32,6 @@ Design bar: premium fintech (Linear / Mercury / Ramp / Arc), dark-first, deep "t
 **MVP-1 / MVP-2 — breadth**
 4. Components: `OfferRow`, `MandateCard` (cap progress + revoke), `RewardCard`, `TimekeeperChart` (Recharts), `ChatPanel` (streaming), `AgentBadge`, `SurfaceBadge`.
 5. Pages: Feed, Chat, Spending Profile (Recharts from `/profile`; one embedded Atlas Chart if `ATLAS_CHARTS_*` is set), Wishlist, Mandates, Rewards, Timekeeper.
-6. **Cloudforce Side Kick (F9)** — standalone 3-question "Spending Personality" agent in Cloudforce's Purple (outside this repo); post on LinkedIn tagging @Cloudforce and @University of Washington **early** (virality is judged) — ask me before posting.
 
 **MVP-3 — polish & pitch**
 7. Motion pass (ApprovalCard → Receipt morph, feed slide-in, ticker), empty/loading/error states, skeletons, focus states, reduced motion.
