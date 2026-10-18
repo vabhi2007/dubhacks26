@@ -56,13 +56,14 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
   const [spend, mtd, history, owned] = await Promise.all([
     spendByCategory(userId, now),
     hasBudget ? monthToDateSpend(userId, product.category, now) : 0,
-    priceStats(productId, best.priceCents, now),
+    sellerPriceStats(productId, best, offers, now),
     recentPurchases(userId, product.category, now),
   ]);
 
   const price = best.priceCents;
   // A $0 budget means "don't spend here": no finite ratio, but it must still count as over budget.
   const zeroBudget = monthlyBudget === 0;
+  // Fraction of the monthly category budget (1.19 = 119%), matching fixtures' 0.36.
   const budgetImpactPct = hasBudget && !zeroBudget ? round(price / monthlyBudget, 2) : undefined;
   const expectedDropCents =
     history && history.dipsBelowRef > 0 ? Math.max(0, price - history.typicalLowCents) : 0;
@@ -127,24 +128,35 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
   };
 
   rememberVerdict(verdict);
-  // The verdict is already paid for — a slow or unreachable Atlas must not turn it into a 500.
-  if (hasDb()) {
-    try {
-      const c = await collections();
-      await c.verdicts.insertOne(verdict);
-      await emit({
-        userId,
-        agent: "worth_it",
-        surface,
-        type: "verdict",
-        summary: `${label(verdict.kind)} — ${verdict.headline}`,
-        refs: { productId, verdictId: verdict._id },
-      });
-    } catch (e) {
-      console.warn("[worth_it] failed to persist verdict/event:", (e as Error).message);
-    }
-  }
+  // Persist in the background: the verdict is already paid for, and a slow or unreachable Atlas
+  // must neither fail nor delay it. rememberVerdict keeps /verdicts/:id working meanwhile.
+  if (hasDb()) void persist(verdict, surface);
   return verdict;
+}
+
+async function persist(verdict: Verdict, surface: Surface) {
+  try {
+    const c = await collections();
+    await c.verdicts.insertOne(verdict);
+    await emit({
+      userId: verdict.userId,
+      agent: "worth_it",
+      surface,
+      type: "verdict",
+      summary: `${label(verdict.kind)} — ${verdict.headline}`,
+      refs: { productId: verdict.productId, verdictId: verdict._id },
+    });
+  } catch (e) {
+    console.warn("[worth_it] failed to persist verdict/event:", (e as Error).message);
+  }
+}
+
+/** History for the best offer's seller; if it has none (e.g. a fresh SerpAPI offer), the other exact new sellers. */
+async function sellerPriceStats(productId: string, best: Offer, offers: Offer[], now: Date) {
+  const own = await priceStats(productId, best.priceCents, [best.seller], now);
+  if (own) return own;
+  const peers = offers.filter((o) => o.matched === "exact" && o.condition === "new").map((o) => o.seller);
+  return peers.length ? priceStats(productId, best.priceCents, peers, now) : undefined;
 }
 
 async function judge(facts: object): Promise<z.infer<typeof Judgment>> {
@@ -178,20 +190,21 @@ function ruleBasedJudgment(a: {
   const cat = SUBSTITUTES.find(([re]) => re.test(a.product.title))?.[1] ?? null;
   const related = cat ? a.spend.find((s) => s.category === cat) : undefined;
   const payback = related ? a.paybackByCategory[related.category] : undefined;
-  const dup = a.owned.find((o) => o.productId === a.productId) ?? a.owned[0];
+  const dup = a.owned.find((o) => o.productId === a.productId);
   const reasons: string[] = [];
   if (related && payback !== undefined)
     reasons.push(`You spent ${usd(related.totalCents)} on ${cat} in 12 months — pays back in ~${payback} months.`);
   if (a.expectedDropCents > 0) reasons.push(`Price has dipped ~${usd(a.expectedDropCents)} below ${usd(a.price)} recently.`);
   if (a.zeroBudget) reasons.push(`You set your ${a.product.category} budget to $0.`);
   else if (a.budgetImpactPct !== undefined) reasons.push(`${usd(a.price)} is ${Math.round(a.budgetImpactPct * 100)}% of your monthly ${a.product.category} budget.`);
-  if (dup) reasons.push(`You bought ${dup.title} for ${usd(dup.amountCents)} in the last year.`);
+  if (dup) reasons.push(`You already bought this for ${usd(dup.amountCents)} in the last year.`);
 
   let kind: "buy" | "wait" | "skip";
   let headline: string;
-  if (dup?.productId === a.productId || a.zeroBudget || (!related && (a.budgetImpactPct ?? 0) > 1)) {
+  const overBudget = (a.budgetImpactPct ?? 0) > 1;
+  if (dup || a.zeroBudget || (!related && overBudget)) {
     kind = "skip";
-    headline = dup?.productId === a.productId ? `Skip — you already bought this ${dup.title}.`
+    headline = dup ? `Skip — you already bought this ${dup.title}.`
       : a.zeroBudget ? `Skip — your ${a.product.category} budget is $0.` : `Skip — ${usd(a.price)} with no habit it replaces.`;
   } else if (a.expectedDropCents >= a.price * 0.05) {
     kind = "wait";
@@ -199,6 +212,9 @@ function ruleBasedJudgment(a: {
   } else if (payback !== undefined && payback <= 12) {
     kind = "buy";
     headline = `Buy — pays for itself in ~${payback} months from your ${cat} spend.`;
+  } else if (!overBudget) {
+    kind = "buy";
+    headline = `Buy — ${usd(a.price)} fits your ${a.product.category} budget and isn't likely to drop.`;
   } else {
     kind = "skip";
     headline = `Skip — ${usd(a.price)} doesn't pay back from your spending.`;

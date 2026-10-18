@@ -7,8 +7,8 @@ import { env } from "../env";
 const DAY = 86_400_000;
 
 // Where seed data (products, offers, users, transactions, price history) comes from.
-// Flip to "mongo" once A's seed is on main; fixtures remain the fallback for anything Mongo lacks.
-const SEED_SOURCE = "fixtures" as "fixtures" | "mongo";
+// A's seed is on main, so this reads Mongo; set "fixtures" to work offline. Fixtures remain the fallback for anything Mongo lacks.
+const SEED_SOURCE = "mongo" as "fixtures" | "mongo";
 
 export const hasDb = () => Boolean(env.MONGODB_URI);
 
@@ -23,7 +23,7 @@ async function tryDb<T>(fn: (c: Cols) => Promise<T>): Promise<T | undefined> {
   try {
     return await fn(await collections());
   } catch (e) {
-    console.warn("[agents] db read failed, using fixtures:", (e as Error).message);
+    console.warn("[agents] db read failed:", (e as Error).message);
     return undefined;
   }
 }
@@ -33,6 +33,13 @@ async function tryDb<T>(fn: (c: Cols) => Promise<T>): Promise<T | undefined> {
 export async function getProduct(productId: string): Promise<Product | undefined> {
   const p = await fromSeed((c) => c.products.findOne({ _id: productId }, { projection: { embedding: 0 } }));
   return p ?? (productId === fx.product._id ? fx.product : undefined);
+}
+
+export async function getProducts(ids: string[]): Promise<Product[]> {
+  if (!ids.length) return [];
+  const ps = (await fromSeed((c) => c.products.find({ _id: { $in: ids } }, { projection: { embedding: 0 } }).toArray())) ?? [];
+  const found = new Set(ps.map((p) => p._id));
+  return [...ps, ...(ids.includes(fx.product._id) && !found.has(fx.product._id) ? [fx.product] : [])];
 }
 
 export async function getOffers(productId: string): Promise<Offer[]> {
@@ -136,10 +143,14 @@ export type PriceStats = {
   dipsBelowRef: number;
 };
 
-export async function priceStats(productId: string, refCents: number, now = new Date()): Promise<PriceStats | undefined> {
+/** 90-day stats for the given sellers only — mixing in used/refurb sellers would make every week look like a "dip". */
+export async function priceStats(productId: string, refCents: number, sellers: string[], now = new Date()): Promise<PriceStats | undefined> {
   const since = new Date(now.getTime() - 90 * DAY);
   const pts = await fromSeed((c) =>
-    c.priceHistory.find({ "meta.productId": productId, ts: { $gte: since, $lte: now } }).sort({ ts: 1 }).toArray(),
+    c.priceHistory
+      .find({ "meta.productId": productId, "meta.seller": { $in: sellers }, ts: { $gte: since, $lte: now } })
+      .sort({ ts: 1 })
+      .toArray(),
   );
   const series = pts?.length ? pts.map((p) => ({ ts: p.ts.getTime(), priceCents: p.priceCents })) : fallbackHistory(productId, now);
   if (!series.length) return undefined;
@@ -183,12 +194,12 @@ function fallbackHistory(productId: string, now: Date) {
 export type PastPurchase = { productId: string; title: string; amountCents: number; ts: Date };
 
 /** Orders in the same category over the last 12 months. Orders are written at runtime by purchase(), so always Mongo;
- *  products resolve through getProduct so they follow SEED_SOURCE. */
+ *  products resolve through getProducts so they follow SEED_SOURCE. */
 export async function recentPurchases(userId: string, category: Category, now = new Date()): Promise<PastPurchase[]> {
   const orders = await tryDb((c) => c.orders.find({ userId, ts: { $gte: new Date(now.getTime() - 365 * DAY) } }).sort({ ts: -1 }).toArray());
   if (!orders?.length) return [];
-  const ids = [...new Set(orders.map((o) => o.productId))];
-  const byId = new Map((await Promise.all(ids.map(getProduct))).filter((p) => p?.category === category).map((p) => [p!._id, p!]));
+  const products = await getProducts([...new Set(orders.map((o) => o.productId))]);
+  const byId = new Map(products.filter((p) => p.category === category).map((p) => [p._id, p]));
   return orders
     .filter((o) => byId.has(o.productId))
     .map((o) => ({ productId: o.productId, title: byId.get(o.productId)!.title, amountCents: o.amountCents, ts: o.ts }));
