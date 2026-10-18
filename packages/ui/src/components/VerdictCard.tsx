@@ -1,8 +1,9 @@
 "use client";
 // VerdictCard — the Worth-It / Timekeeper verdict, identical on web and extension.
-// Header: image, product, badge (with how long to wait), an eye + price when Alfred is watching it, and a caret that
-// expands the reasons, math chips, Smart Pay, then the caller's `details` (graphs) — mounted only once opened, so they can
-// fetch lazily. The headline is left to the surrounding copy (chat reply, feed) unless there's no product title.
+// Header: image, product, badge (what we're waiting for), an eye + price when Alfred is watching it, and a caret that
+// expands the caller's `details` (graphs, each with a takeaway line) — mounted only once opened, so they can fetch lazily.
+// Without `details`, the caret expands the reasons, math chips and Smart Pay instead. The headline is left to the
+// surrounding copy (chat reply, feed) unless there's no product title.
 // Presentational: callers pass their own action buttons via `actions` (Watch / Buy).
 import { type ReactNode, useId, useState } from "react";
 import type { Product, Verdict } from "@alfred/shared";
@@ -85,7 +86,7 @@ export function VerdictCard({
   };
 
   return (
-    <div className={cn("rounded-card border border-border bg-surface p-6", className)}>
+    <div className={cn("rounded-card border border-border bg-surface p-5", className)}>
       <div className="flex items-center gap-4">
         {product?.imageUrl ? (
           // Plain <img>: this card is shared with the extension, which has no next/image.
@@ -99,7 +100,12 @@ export function VerdictCard({
         <p className="line-clamp-2 min-w-0 flex-1 font-serif text-[18px] leading-snug tracking-tight" title={product?.title || verdict.headline}>
           {product?.title || verdict.headline}
         </p>
-        <VerdictBadge kind={verdict.kind} detail={waitDetail(verdict)} className="shrink-0" />
+        {/* When Alfred is already watching, the eye + price says what we're waiting for; keep only Timekeeper's duration. */}
+        <VerdictBadge
+          kind={verdict.kind}
+          detail={watchingCents != null && !verdict.timekeeper ? undefined : waitDetail(verdict)}
+          className="shrink-0"
+        />
         {watchingCents != null ? (
           <span className="inline-flex shrink-0 items-center gap-1.5 text-accent" title={`Watching — buys at ${fmtUSD(watchingCents)}`}>
             <Eye />
@@ -119,7 +125,7 @@ export function VerdictCard({
         </button>
       </div>
 
-      {actions ? <div className="mt-5 flex flex-wrap gap-2">{actions}</div> : null}
+      {actions ? <div className="mt-4 flex flex-wrap gap-2">{actions}</div> : null}
 
       {/* grid-rows 0fr → 1fr animates to the content's natural height; instant under reduced motion. */}
       <div
@@ -130,31 +136,37 @@ export function VerdictCard({
         )}
       >
         <div className="min-h-0 overflow-hidden" inert={!open}>
-          <div className="mt-5 border-t border-border pt-5">
-            <ul className="space-y-1.5">
-              {verdict.reasons.map((r, i) => (
-                <li key={`${i}-${r}`} className="flex gap-2 text-sm text-text-muted">
-                  <span aria-hidden className="mt-2 h-1 w-1 shrink-0 bg-text-muted/60" />
-                  <span>{r}</span>
-                </li>
-              ))}
-            </ul>
+          <div className="mt-4 border-t border-border pt-4">
+            {details ? (
+              // The graphs (each with its own takeaway line) replace the reason bullets, chips and Smart Pay line.
+              opened ? details : null
+            ) : (
+              // No graphs from the caller (e.g. pages that chart elsewhere): fall back to the reasons and math.
+              <>
+                <ul className="space-y-1.5">
+                  {verdict.reasons.map((r, i) => (
+                    <li key={`${i}-${r}`} className="flex gap-2 text-sm text-text-muted">
+                      <span aria-hidden className="mt-2 h-1 w-1 shrink-0 bg-text-muted/60" />
+                      <span>{r}</span>
+                    </li>
+                  ))}
+                </ul>
 
-            <div className="mt-4 flex flex-wrap gap-1.5">
-              {mathChips(verdict).map((c, i) => (
-                <Chip key={`${i}-${c}`} label={c} />
-              ))}
-            </div>
+                <div className="mt-4 flex flex-wrap gap-1.5">
+                  {mathChips(verdict).map((c, i) => (
+                    <Chip key={`${i}-${c}`} label={c} />
+                  ))}
+                </div>
 
-            {verdict.smartPay ? (
-              <div className="mt-4 rounded-control border border-border bg-surface-2 px-3 py-2 text-sm">
-                <span className="text-text-muted">Smart Pay: </span>
-                <span className="num text-accent">+{fmtUSD(verdict.smartPay.rewardCents)}</span>
-                <span className="text-text-muted"> back on this card</span>
-              </div>
-            ) : null}
-
-            {details && opened ? <div className="mt-6">{details}</div> : null}
+                {verdict.smartPay ? (
+                  <div className="mt-4 rounded-control border border-border bg-surface-2 px-3 py-2 text-sm">
+                    <span className="text-text-muted">Smart Pay: </span>
+                    <span className="num text-accent">+{fmtUSD(verdict.smartPay.rewardCents)}</span>
+                    <span className="text-text-muted"> back on this card</span>
+                  </div>
+                ) : null}
+              </>
+            )}
           </div>
         </div>
       </div>

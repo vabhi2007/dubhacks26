@@ -36,7 +36,7 @@ const SYSTEM = `You are Alfred's Worth-It agent. You decide whether the user sho
 Rules:
 - Use only numbers that appear in FACTS. Never invent prices, dates, or spend. Round money to whole dollars in prose.
 - "buy": good value now (price at or near its typical low, fits budget, or clearly pays for itself).
-- "wait": worth buying, but history shows a likely drop soon (expectedDrop > 0 with repeated dips) — say how much, and when if nextLikelySaleInDays is given ("next sale likely in about a week").
+- "wait": worth buying, but history shows repeated drops (expectedDrop > 0) — say how much and how often it has dropped (salesInLast90Days, roughlyEveryDays). Describe the past; never predict a date or say how many days to wait.
 - "skip": poor value for this user — no matching habit, blows the budget, or duplicates what they already spend on. Say Skip when it's true; don't be a salesperson.
 - If alreadyBoughtInCategory12mo shows the same or an overlapping product, lean Skip and say what they already own.
 - Payback: only claim the product "pays for itself" if it genuinely replaces spending in replacesCategory. Use the precomputed paybackMonths for that category from FACTS.
@@ -70,8 +70,6 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
   const budgetImpactPct = hasBudget && !zeroBudget ? round(price / monthlyBudget, 2) : undefined;
   const expectedDropCents =
     history && history.dipsBelowRef >= MIN_DIPS ? Math.max(0, price - history.typicalLowCents) : 0;
-  // Only meaningful alongside an expected drop: how long until that drop is likely to arrive.
-  const expectedWaitDays = expectedDropCents > 0 ? history?.nextSaleInDays : undefined;
   const paybackByCategory = Object.fromEntries(
     spend.filter((s) => s.totalCents > 0).map((s) => [s.category, round(price / (s.totalCents / 12), 1)]),
   );
@@ -91,7 +89,7 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
       weeksDippedAtLeast5PctBelowBest: history.dipsBelowRef,
     },
     expectedDrop: fmtUSD(expectedDropCents),
-    ...(expectedWaitDays !== undefined && { nextLikelySaleInDays: expectedWaitDays }),
+    ...(history && expectedDropCents > 0 && { salesInLast90Days: history.sales, ...(history.daysBetweenSales && { roughlyEveryDays: history.daysBetweenSales }) }),
     budget: !hasBudget
       ? { category: product.category, monthly: "no budget set" }
       : zeroBudget
@@ -111,7 +109,7 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
 
   const j = await judge(facts).catch((e) => {
     console.warn("[worth_it] Claude unavailable, using rule-based verdict:", (e as Error).message);
-    return ruleBasedJudgment({ product, price, expectedDropCents, expectedWaitDays, budgetImpactPct, zeroBudget, spend, paybackByCategory, owned, productId });
+    return ruleBasedJudgment({ product, price, expectedDropCents, sales: history?.sales ?? 0, budgetImpactPct, zeroBudget, spend, paybackByCategory, owned, productId });
   });
 
   const related = j.replacesCategory ? spend.find((s) => s.category === j.replacesCategory) : undefined;
@@ -130,7 +128,6 @@ export async function worthIt(input: WorthItInput): Promise<Verdict> {
       ...(related && { relatedSpend12moCents: related.totalCents, paybackMonths: paybackByCategory[related.category] }),
       ...(budgetImpactPct !== undefined && { budgetImpactPct }),
       expectedDropCents,
-      ...(expectedWaitDays !== undefined && { expectedWaitDays }),
     },
     ...(pay && { smartPay: { cardId: pay.cardId, ...(pay.offerId && { offerId: pay.offerId }), rewardCents: pay.rewardCents } }),
     createdAt: now,
@@ -185,7 +182,7 @@ const SUBSTITUTES: [RegExp, Category][] = [
 
 /** Deterministic verdict so the mock path works with no API key (and survives API outages). */
 function ruleBasedJudgment(a: {
-  product: Product; productId: string; price: number; expectedDropCents: number; expectedWaitDays?: number; budgetImpactPct?: number; zeroBudget: boolean;
+  product: Product; productId: string; price: number; expectedDropCents: number; sales: number; budgetImpactPct?: number; zeroBudget: boolean;
   spend: CategorySpend[]; paybackByCategory: Record<string, number>; owned: PastPurchase[];
 }): z.infer<typeof Judgment> {
   const cat = SUBSTITUTES.find(([re]) => re.test(a.product.title))?.[1] ?? null;
@@ -209,7 +206,7 @@ function ruleBasedJudgment(a: {
       : a.zeroBudget ? `Skip — your ${a.product.category} budget is $0.` : `Skip — ${usd(a.price)} with no habit it replaces.`;
   } else if (a.expectedDropCents >= a.price * 0.05) {
     kind = "wait";
-    headline = `Wait${a.expectedWaitDays ? ` ~${waitLabel(a.expectedWaitDays)}` : ""} — it usually dips ~${usd(a.expectedDropCents)} below today's price.`;
+    headline = `Wait for ~${usd(a.price - a.expectedDropCents)} — it's dropped there ${a.sales > 1 ? `${a.sales} times` : "before"} in the last 90 days.`;
   } else if (payback !== undefined && payback <= 12) {
     kind = "buy";
     headline = `Buy — pays for itself in ~${payback} months from your ${cat} spend.`;
@@ -223,5 +220,4 @@ function ruleBasedJudgment(a: {
   return { kind, headline, reasons: reasons.slice(0, 4).length ? reasons.slice(0, 4) : [headline], replacesCategory: related ? cat : null };
 }
 
-const waitLabel = (days: number) => (days < 10 ? `${days} day${days === 1 ? "" : "s"}` : `${Math.round(days / 7)} weeks`);
 const round = (n: number, dp: number) => Math.round(n * 10 ** dp) / 10 ** dp;
