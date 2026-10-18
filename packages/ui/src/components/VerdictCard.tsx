@@ -8,7 +8,7 @@ import { VerdictBadge } from "./VerdictBadge";
 
 function Chip({ label }: { label: string }) {
   return (
-    <span className="inline-flex items-center rounded-full border border-border bg-surface-2 px-2.5 py-1 text-xs text-text-muted">
+    <span className="inline-flex items-center rounded-none border border-border bg-surface-2 px-2.5 py-1 text-xs text-text-muted">
       {label}
     </span>
   );
@@ -52,7 +52,7 @@ export function VerdictCard({
           {product?.title ? (
             <div className="truncate text-sm text-text-muted">{product.title}</div>
           ) : null}
-          <p className="mt-1 text-[20px] font-medium leading-snug tracking-tight">{verdict.headline}</p>
+          <p className="mt-1 font-serif text-[20px] leading-snug tracking-tight">{verdict.headline}</p>
         </div>
         <VerdictBadge kind={verdict.kind} className="shrink-0" />
       </div>

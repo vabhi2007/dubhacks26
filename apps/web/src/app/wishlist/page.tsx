@@ -37,7 +37,7 @@ function WatchRow({ w }: { w: WatchView }) {
           ) : null}
         </div>
       </div>
-      <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize", STATUS_STYLE[w.status])}>
+      <span className={cn("shrink-0 rounded-none px-2.5 py-0.5 text-xs font-medium capitalize", STATUS_STYLE[w.status])}>
         {w.status}
       </span>
     </div>
@@ -53,7 +53,7 @@ export default function Wishlist() {
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-8">
-      <h1 className="text-[28px] font-semibold tracking-tight">Wishlist</h1>
+      <h1 className="font-serif text-[28px] tracking-tight">Wishlist</h1>
       <p className="mt-1 text-sm text-text-muted">
         Products Alfred is watching. When one drops to your target, it asks before buying.
       </p>
