@@ -24,6 +24,7 @@ import {
   resolveApproval,
 } from "../lib/api";
 import { useAgentEvent, useEvents } from "../lib/useEvents";
+import { useEventHistory } from "../lib/useEventHistory";
 import { VerdictGraphs } from "../components/VerdictGraphs";
 
 // Anything that moves money / changes stats or approvals (reset emits "message").
@@ -68,7 +69,9 @@ export default function Home() {
   const [wishlist, setWishlist] = useState<WatchView[]>([]);
   const [resolvedLocal, setResolvedLocal] = useState<Record<string, ApprovalState>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
-  const { events, status } = useEvents();
+  const { status } = useEvents();
+  // The list shows recent history too (backlog + live); refetch handlers stay on the live-only stream above.
+  const history = useEventHistory();
 
   const offline = status === "offline";
 
@@ -152,7 +155,7 @@ export default function Home() {
   }
 
   // Fixtures only when the agent is unreachable; otherwise live data (possibly empty).
-  const feed = offline ? fixtureFeed : events;
+  const feed = offline ? fixtureFeed : history.events.slice(0, 8);
   const verdict: VerdictView | null = offline ? fxVerdict : liveVerdict;
 
   // Receipts to show: fetched resolved approvals, minus any still in the pending list.
