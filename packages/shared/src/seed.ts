@@ -1,17 +1,20 @@
 // Deterministic demo data (DESIGN.md §7) for `pnpm seed` and POST /admin/reset. Server-side only. Owner: A.
-// Values come from a fixed Faker seed; dates are relative to today's UTC midnight, so reruns on the same day are identical.
-// Wipes with deleteMany — never drops — so collections, time-series options and search indexes survive.
+// Values come from fixed Faker seeds (one stream per persona / catalog, so editing one doesn't reshuffle the others);
+// dates are relative to today's UTC midnight, so reruns on the same day are identical.
+// Wipes with deleteMany — never drops — so collections, time-series options and search indexes survive. Embeddings
+// already in the db are carried over by _id, so a reset doesn't break Vector Search (re-embed with `pnpm indexes`).
 // Ids match fixtures.ts (u_maya, prd_bambino, ofr_1, mnd_kitchen, crd_sig, …) so fixture-built UIs line up with real data.
 import { Faker, en } from "@faker-js/faker";
 import type { Db } from "mongodb";
 import { COLLECTIONS, collections, getDb, merchantIdFor } from "./db";
 import type * as S from "./schemas";
+import { CATALOG } from "./seed-catalog";
+import { CARD_OFFERS, MERCHANTS, PERSONAS, PLANS, REWARDS_PROGRAMS, TRADE_IN, TRADE_IN_MONTHS, type MerchantName, type Persona } from "./seed-world";
 
 export const DEMO_USER_ID = "u_maya";
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
 const PT_OFFSET = 7; // Seattle in October is UTC-7: local hour + 7 = UTC hour
-const CAFE_TOTAL_12MO = 640_00;
 const PRICE_HISTORY_DAYS = 90;
 
 // ---------- schema ----------
@@ -49,67 +52,8 @@ export async function ensureSchema(db: Db): Promise<string[]> {
   return created;
 }
 
-// ---------- static reference data ----------
-const MERCHANTS = {
-  Starbucks: ["coffee", "5814"],
-  "Cafe Allegro": ["coffee", "5814"],
-  "Ugly Mug Cafe": ["coffee", "5814"],
-  "Seattle Coffee Works": ["coffee", "5814"],
-  "Trader Joe's": ["groceries", "5411"],
-  QFC: ["groceries", "5411"],
-  Safeway: ["groceries", "5411"],
-  Chipotle: ["dining", "5814"],
-  "Thai Tom": ["dining", "5812"],
-  "Dick's Drive-In": ["dining", "5814"],
-  "Pagliacci Pizza": ["dining", "5812"],
-  Spotify: ["subscriptions", "5815"],
-  Netflix: ["subscriptions", "4899"],
-  iCloud: ["subscriptions", "5818"],
-  "T-Mobile": ["phone", "4814"],
-  Uber: ["transport", "4121"],
-  Lyft: ["transport", "4121"],
-  Target: ["home", "5310"],
-  IKEA: ["home", "5712"],
-  Amazon: ["other", "5999"],
-  "AMC Theatres": ["entertainment", "7832"],
-  Uniqlo: ["clothing", "5651"],
-  REI: ["clothing", "5941"],
-  Walgreens: ["health", "5912"],
-  "Sur La Table": ["kitchen", "5719"],
-  // sellers in the mock catalog
-  "Popover Kitchen": ["kitchen", "5719"],
-  Breville: ["kitchen", "5722"],
-  "Best Buy": ["electronics", "5732"],
-  Apple: ["electronics", "5732"],
-  "Google Store": ["electronics", "5732"],
-  "Back Market": ["electronics", "5732"],
-  Swappa: ["electronics", "5732"],
-  eBay: ["other", "5999"],
-} as const satisfies Record<string, readonly [S.Category, string]>;
-type MerchantName = keyof typeof MERCHANTS;
 
-// rewards: category → multiplier; `default` applies to every other category.
-const CARDS: S.Card[] = [
-  { _id: "crd_sig", userId: DEMO_USER_ID, network: "visa", name: "Visa Signature Rewards", last4: "4821", rewards: { kitchen: 0.03, home: 0.03, electronics: 0.02, default: 0.01 } },
-  { _id: "crd_dining", userId: DEMO_USER_ID, network: "visa", name: "Visa Dine & Sip", last4: "1177", rewards: { coffee: 0.04, dining: 0.04, entertainment: 0.02, default: 0.01 } },
-  { _id: "crd_cash", userId: DEMO_USER_ID, network: "visa", name: "Visa Everyday Cash", last4: "3090", rewards: { groceries: 0.03, transport: 0.02, default: 0.015 } },
-];
-
-const USER: S.User = {
-  _id: DEMO_USER_ID,
-  name: "Maya Chen",
-  phone: "+12065550142",
-  settings: {
-    confirmAboveCents: 100_00,
-    callAboveCents: 500_00,
-    monthlyBudgets: {
-      coffee: 60_00, groceries: 320_00, dining: 160_00, kitchen: 75_00, home: 90_00, electronics: 100_00,
-      clothing: 60_00, entertainment: 40_00, transport: 60_00, subscriptions: 35_00, other: 120_00,
-    },
-  },
-};
-
-// ---------- catalog ----------
+// ---------- hero catalog (frozen: DESIGN.md §7) ----------
 // price(daysAgo) → cents; daysAgo 0 is the current offer price.
 type OfferSpec = { seller: MerchantName; condition: S.Offer["condition"]; matched?: S.Offer["matched"]; price: (daysAgo: number) => number; history?: boolean };
 type ProductSpec = Pick<S.Product, "_id" | "title" | "brand" | "model" | "category" | "canonicalKey"> & { offers: OfferSpec[] };
@@ -122,7 +66,7 @@ function weekendsNear(today: number, centers: number[]) {
   return days;
 }
 
-function catalog(today: number): ProductSpec[] {
+function heroCatalog(today: number): ProductSpec[] {
   const bambinoDips = weekendsNear(today, [77, 49, 21]); // "dipped to $149 three times in 90 days, usually on weekends"
   const phoneDip = weekendsNear(today, [49]);
   const flat = (cents: number) => () => cents;
@@ -162,70 +106,112 @@ function catalog(today: number): ProductSpec[] {
   ];
 }
 
-// ---------- generators ----------
-function transactions(f: Faker, today: number): S.Transaction[] {
-  const chance = (p: number) => f.number.float() < p;
-  const int = (min: number, max: number) => f.number.int({ min, max });
-  const pick = <T>(xs: readonly T[]) => f.helpers.arrayElement(xs);
-  const tx = (daysAgo: number, localHour: number, merchant: MerchantName, amountCents: number, cardId: string): S.Transaction => ({
-    ts: new Date(today - daysAgo * DAY + (localHour + PT_OFFSET) * HOUR + int(0, 59) * 60_000),
-    meta: { userId: DEMO_USER_ID, merchantId: merchantIdFor(merchant), category: MERCHANTS[merchant][0] },
-    amountCents,
-    cardId,
-  });
+// ---------- generated catalog ----------
+const SELLERS: Partial<Record<S.Category, MerchantName[]>> = {
+  electronics: ["Amazon", "Best Buy", "Target", "Walmart", "B&H Photo"],
+  kitchen: ["Amazon", "Target", "Williams Sonoma", "Sur La Table", "Walmart"],
+  home: ["Amazon", "Target", "Walmart", "Wayfair", "Costco"],
+  health: ["Amazon", "Target", "Best Buy", "Walgreens", "Walmart"],
+  clothing: ["Amazon", "REI", "Nordstrom", "Zappos"],
+  travel: ["Amazon", "REI", "Nordstrom", "Target"],
+  entertainment: ["Amazon", "Best Buy", "Target", "Walmart"],
+};
+const BRAND_STORES: Partial<Record<string, MerchantName>> = { Apple: "Apple", Google: "Google Store", IKEA: "IKEA", Uniqlo: "Uniqlo", Breville: "Breville" };
 
-  const cafe: S.Transaction[] = [];
-  const rest: S.Transaction[] = [];
-  // Start 2 days back so local evening times never land in the future.
-  for (let d = 2; d <= 365; d++) {
+const slug = (s: string, sep = "-") =>
+  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, sep).replace(/^[-_]+|[-_]+$/g, "");
+const to99 = (cents: number) => Math.max(99, Math.round(cents / 100) * 100 - 1); // $X.99
+
+function generatedCatalog(f: Faker, today: number): ProductSpec[] {
+  const int = (min: number, max: number) => f.number.int({ min, max });
+  const between = (min: number, max: number) => f.number.float({ min, max });
+  const chance = (p: number) => f.number.float() < p;
+  return CATALOG.map(([category, brand, model, title, list]) => {
+    const store = BRAND_STORES[brand];
+    const pool = (SELLERS[category] ?? ["Amazon", "Target"]).filter((s) => s !== store);
+    const sellers = [...(store ? [store] : []), ...f.helpers.arrayElements(pool, int(2, 3))];
+    // First seller sits at list price; the rest discount up to ~22%. The cheapest new offer gets 90 days of history.
+    const prices = sellers.map((_, i) => (i === 0 ? list : to99(list * (1 - between(0, 0.22)))));
+    const cheapest = prices.indexOf(Math.min(...prices));
+    const cur = prices[cheapest]!;
+    const saleSince = int(0, 40); // days the current price has held (if below list)
+    const dips = weekendsNear(today, chance(0.5) ? [int(saleSince + 7, 85), int(saleSince + 7, 85)] : [int(saleSince + 7, 85)]);
+    const dip = to99(cur * 0.9);
+    const offers: OfferSpec[] = sellers.map((seller, i) =>
+      i === cheapest
+        ? { seller, condition: "new", price: (d) => (dips.has(d) ? dip : d > saleSince ? list : cur) }
+        : { seller, condition: "new", price: () => prices[i]!, history: false },
+    );
+    const resale = category === "electronics" || category === "kitchen" || category === "entertainment";
+    if (chance(resale ? 0.35 : 0.12)) offers.push({ seller: "eBay", condition: "used", price: ((c) => () => c)(to99(list * between(0.55, 0.75))), history: false });
+    if (category === "electronics" && chance(0.3)) offers.push({ seller: "Back Market", condition: "refurb", price: ((c) => () => c)(to99(list * between(0.72, 0.85))), history: false });
+    if (chance(0.1)) offers.push({ seller: "Amazon", condition: "new", matched: "variant", price: ((c) => () => c)(to99(list * between(1.05, 1.25))), history: false });
+    if (chance(0.06)) offers.push({ seller: "Amazon UK", condition: "new", price: ((c) => () => c)(to99(list * between(0.85, 1))), history: false });
+    return { _id: `prd_${slug(brand, "_")}_${slug(model, "_")}`, title, brand, model, category, canonicalKey: `${slug(brand)}-${slug(model)}`, offers };
+  });
+}
+
+// ---------- generators ----------
+/** FNV-1a, so each stream (persona, catalog) gets its own stable Faker seed. */
+function fakerFor(stream: string) {
+  let h = 0x811c9dc5;
+  for (const ch of stream) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193) >>> 0;
+  const f = new Faker({ locale: [en] });
+  f.seed(h);
+  return f;
+}
+
+function transactions(f: Faker, today: number, p: Persona): S.Transaction[] {
+  const chance = (q: number) => f.number.float() < q;
+  const int = (min: number, max: number) => f.number.int({ min, max });
+  const byHabit = p.habits.map((): S.Transaction[] => []);
+  // Start 2 days back so local evening times never land in the future; stop at 364 so any trailing-12-month window sees all of it.
+  for (let d = 2; d <= 364; d++) {
     const date = new Date(today - d * DAY);
     const dow = date.getUTCDay();
     const dom = date.getUTCDate();
     const weekend = dow === 0 || dow === 6;
-    const add = (hour: number, m: MerchantName, cents: number, card: string) => rest.push(tx(d, hour, m, cents, card));
-
-    // Cafés: ~2.3 visits/week, ~60% Starbucks (rewards demo). Kept inside 364 days so any trailing-12-month window sees all of it.
-    if (d <= 364 && chance(weekend ? 0.22 : 0.38)) {
-      const sbux = chance(0.6);
-      cafe.push(tx(d, weekend ? int(9, 13) : int(7, 10), sbux ? "Starbucks" : pick(["Cafe Allegro", "Ugly Mug Cafe", "Seattle Coffee Works"] as const), sbux ? int(495, 745) : int(375, 650), "crd_dining"));
-    }
-    if (dow === 6) add(int(10, 16), pick(["Trader Joe's", "Trader Joe's", "QFC", "Safeway"] as const), int(28_00, 96_00), "crd_cash");
-    if (dow === 3 && chance(0.35)) add(int(17, 20), pick(["QFC", "Safeway"] as const), int(8_00, 25_00), "crd_cash");
-    if (chance(weekend ? 0.3 : 0.16)) add(int(12, 20), pick(["Chipotle", "Thai Tom", "Dick's Drive-In", "Pagliacci Pizza"] as const), int(11_00, dow === 5 || dow === 6 ? 45_00 : 24_00), "crd_dining");
-    if (dom === 3) add(6, "Spotify", 11_99, "crd_sig");
-    if (dom === 12) add(6, "Netflix", 15_49, "crd_sig");
-    if (dom === 20) add(6, "iCloud", 2_99, "crd_sig");
-    if (dom === 22) add(9, "T-Mobile", 85_00, "crd_sig");
-    if (chance(0.08)) add(int(8, 22), pick(["Uber", "Lyft"] as const), int(9_00, 32_00), "crd_cash");
-    if (chance(0.07)) add(int(11, 20), "Target", int(14_00, 85_00), "crd_sig");
-    if (chance(0.1)) add(int(9, 22), "Amazon", int(9_00, 65_00), "crd_sig");
-    if (chance(0.03)) add(int(18, 21), "AMC Theatres", int(14_00, 22_00), "crd_dining");
-    if (chance(0.015)) add(int(12, 18), pick(["Uniqlo", "REI"] as const), int(25_00, 120_00), "crd_sig");
-    if (chance(0.02)) add(int(10, 20), "Walgreens", int(6_00, 35_00), "crd_cash");
-    if (chance(0.006)) add(int(11, 16), "IKEA", int(60_00, 180_00), "crd_sig");
-    if (chance(0.005)) add(int(11, 18), "Best Buy", int(25_00, 150_00), "crd_sig");
-    if (chance(0.006)) add(int(11, 18), "Sur La Table", int(18_00, 45_00), "crd_sig");
+    p.habits.forEach((h, i) => {
+      const fires =
+        h.dom !== undefined ? dom === h.dom && chance(h.p ?? 1)
+        : h.dow !== undefined ? dow === h.dow && chance(h.p ?? 1)
+        : chance(weekend ? (h.pWeekend ?? h.p ?? 0) : (h.p ?? 0));
+      if (!fires) return;
+      const merchant = f.helpers.weightedArrayElement(Object.entries(h.merchants).map(([value, weight]) => ({ value: value as MerchantName, weight: weight ?? 1 })));
+      const max = h.weekendMaxCents && (dow === 5 || dow === 6) ? h.weekendMaxCents : h.cents[1];
+      byHabit[i]!.push({
+        ts: new Date(today - d * DAY + (int(h.hours[0], h.hours[1]) + PT_OFFSET) * HOUR + int(0, 59) * 60_000),
+        meta: { userId: p.user._id, merchantId: merchantIdFor(merchant), category: MERCHANTS[merchant][0] },
+        amountCents: int(h.cents[0], max),
+        cardId: h.card,
+      });
+    });
   }
-
-  // Scale café amounts (to 5¢) so the 12-month total is exactly CAFE_TOTAL_12MO.
-  const raw = cafe.reduce((s, t) => s + t.amountCents, 0);
-  for (const t of cafe) t.amountCents = Math.round((t.amountCents * CAFE_TOTAL_12MO) / raw / 5) * 5;
-  cafe[cafe.length - 1]!.amountCents += CAFE_TOTAL_12MO - cafe.reduce((s, t) => s + t.amountCents, 0);
-
-  return [...cafe, ...rest].sort((a, b) => a.ts.getTime() - b.ts.getTime());
+  // Habits with a fixed 12-month total (Maya's $640 at cafés): scale to exactly that, in 5¢ steps.
+  p.habits.forEach((h, i) => {
+    const txs = byHabit[i]!;
+    if (!h.total12moCents || !txs.length) return;
+    const raw = txs.reduce((s, t) => s + t.amountCents, 0);
+    for (const t of txs) t.amountCents = Math.round((t.amountCents * h.total12moCents) / raw / 5) * 5;
+    txs[txs.length - 1]!.amountCents += h.total12moCents - txs.reduce((s, t) => s + t.amountCents, 0);
+  });
+  return byHabit.flat().sort((a, b) => a.ts.getTime() - b.ts.getTime());
 }
 
-function catalogDocs(today: number) {
+function catalogDocs(today: number, specs: ProductSpec[]) {
   const fetchedAt = new Date(today);
   const products: S.Product[] = [];
   const offers: S.Offer[] = [];
   const priceHistory: S.PricePoint[] = [];
+  const keys = new Set<string>();
   let n = 0;
-  for (const { offers: specs, ...p } of catalog(today)) {
+  for (const { offers: os, ...p } of specs) {
+    if (keys.has(p._id) || keys.has(p.canonicalKey)) throw new Error(`seed: duplicate product ${p._id} / ${p.canonicalKey}`);
+    keys.add(p._id).add(p.canonicalKey);
     products.push({ ...p, source: "mock", imageUrl: `https://placehold.co/400x400/141416/E2A829?text=${encodeURIComponent(p.model)}` });
-    for (const o of specs) {
+    for (const o of os) {
       offers.push({
-        _id: `ofr_${++n}`, productId: p._id, seller: o.seller, priceCents: o.price(0), condition: o.condition, region: "US",
+        _id: `ofr_${++n}`, productId: p._id, seller: o.seller, priceCents: o.price(0), condition: o.condition, region: o.seller === "Amazon UK" ? "UK" : "US",
         url: `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(`${p.title} ${o.seller}`)}`, matched: o.matched ?? "exact", fetchedAt,
       });
       if (o.history === false) continue;
@@ -234,6 +220,20 @@ function catalogDocs(today: number) {
     }
   }
   return { products, offers, priceHistory };
+}
+
+function personaDocs(today: number, p: Persona) {
+  const userId = p.user._id;
+  const cardIds = new Set(p.cards.map((c) => c._id));
+  for (const h of p.habits) if (!cardIds.has(h.card)) throw new Error(`seed: ${userId} habit uses unknown card ${h.card}`);
+  const cards: S.Card[] = p.cards.map((c) => ({ ...c, userId, network: "visa" }));
+  const mandates: S.Mandate[] = p.mandates.map(({ expiresInDays, ...m }) => ({ ...m, userId, expiresAt: new Date(today + expiresInDays * DAY) }));
+  const device: S.Device = {
+    _id: `dev_${userId.replace(/^u_/, "")}`, userId, model: p.device.model, purchasedAt: new Date(today - Math.round(p.device.ageMonths * 30.44) * DAY),
+    financingRemainingCents: p.device.financingRemainingCents, batteryHealthPct: p.device.batteryHealthPct, storageUsedPct: p.device.storageUsedPct,
+  };
+  const enrollments: S.Enrollment[] = (p.enrolled ?? []).map((e) => ({ _id: `enr_${userId.replace(/^u_/, "")}_${e.programId.replace(/^rwp_/, "")}`, userId, programId: e.programId, status: "enrolled", estAnnualValueCents: e.estAnnualValueCents }));
+  return { cards, mandates, device, enrollments, transactions: transactions(fakerFor(userId), today, p) };
 }
 
 // ---------- entry point ----------
@@ -245,32 +245,54 @@ export async function seedDemo(opts: { now?: Date } = {}): Promise<Record<string
 
   const now = opts.now ?? new Date();
   const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const f = new Faker({ locale: [en] });
-  f.seed(2026);
 
-  const merchants: S.Merchant[] = Object.entries(MERCHANTS).map(([name, [category, mcc]]) => ({ _id: merchantIdFor(name), name, category, mcc }));
-  const txns = transactions(f, today);
-  const { products, offers, priceHistory } = catalogDocs(today);
+  const programOf = new Map<string, string>(REWARDS_PROGRAMS.flatMap((r) => r.merchants.map((m) => [merchantIdFor(m), r._id] as const)));
+  const merchants: S.Merchant[] = Object.entries(MERCHANTS).map(([name, [category, mcc]]) => {
+    const _id = merchantIdFor(name);
+    return { _id, name, category, mcc, rewardsProgramId: programOf.get(_id) };
+  });
+  const people = PERSONAS.map((p) => personaDocs(today, p));
+  const { products, offers, priceHistory } = catalogDocs(today, [...heroCatalog(today), ...generatedCatalog(fakerFor("catalog"), today)]);
+  const rewardsPrograms: S.RewardsProgram[] = REWARDS_PROGRAMS.map(({ merchants: ms, ...r }) => ({ ...r, merchantIds: ms.map(merchantIdFor) }));
+  const cardOffers: S.CardOffer[] = CARD_OFFERS.map(({ merchant, expiresInDays, ...o }) => ({ ...o, merchantId: merchant && merchantIdFor(merchant), expiresAt: new Date(today + expiresInDays * DAY) }));
+  const tradeinCurves: S.TradeInCurve[] = TRADE_IN.map(({ _id, model, nowCents, perMonthCents, cliff }) => ({
+    _id, model,
+    points: Array.from({ length: TRADE_IN_MONTHS + 1 }, (_, month) => ({ month, valueCents: Math.max(0, nowCents - perMonthCents * month - (cliff && month >= cliff.month ? cliff.cents : 0)) })),
+  }));
 
-  const mandates: S.Mandate[] = [
-    { _id: "mnd_kitchen", userId: DEMO_USER_ID, agent: "watcher", label: "Kitchen upgrades", capCents: 200_00, spentCents: 0, categories: ["kitchen"], merchants: [], expiresAt: new Date(today + 44 * DAY), status: "active", card: { last4: "4821", token: "tok_mock_kitchen" } },
-    { _id: "mnd_coffee", userId: DEMO_USER_ID, agent: "smart_pay", label: "Coffee runs", capCents: 60_00, spentCents: 23_40, categories: ["coffee"], merchants: [], expiresAt: new Date(today + 14 * DAY), status: "active", card: { last4: "1177", token: "tok_mock_coffee" } },
-  ];
+  // Carry embeddings over by _id (deterministic docs → same text), then wipe.
+  const [embP, embR] = await Promise.all([
+    c.products.find({ embedding: { $exists: true } }, { projection: { embedding: 1 } }).toArray(),
+    c.rewardsPrograms.find({ embedding: { $exists: true } }, { projection: { embedding: 1 } }).toArray(),
+  ]);
+  const keep = new Map<string, number[]>([...embP, ...embR].map((d) => [d._id, d.embedding!]));
+  const withEmbedding = <T extends { _id: string; embedding?: number[] }>(d: T): T => (keep.has(d._id) ? { ...d, embedding: keep.get(d._id) } : d);
 
   await Promise.all(Object.values(COLLECTIONS).map((name) => db.collection(name).deleteMany({})));
+  const W = { ignoreUndefined: true }; // omit undefined optional fields (e.g. merchants without a rewards program) instead of storing null
+  const TS = { ...W, ordered: false }; // time series: unordered for speed
   await Promise.all([
-    c.users.insertOne(USER),
-    c.merchants.insertMany(merchants),
-    c.cards.insertMany(CARDS),
-    c.mandates.insertMany(mandates),
-    c.transactions.insertMany(txns, { ordered: false }),
-    c.products.insertMany(products),
-    c.offers.insertMany(offers),
-    c.priceHistory.insertMany(priceHistory, { ordered: false }),
+    c.users.insertMany(PERSONAS.map((p) => p.user), W),
+    c.merchants.insertMany(merchants, W),
+    c.cards.insertMany(people.flatMap((p) => p.cards), W),
+    c.mandates.insertMany(people.flatMap((p) => p.mandates), W),
+    c.devices.insertMany(people.map((p) => p.device), W),
+    c.enrollments.insertMany(people.flatMap((p) => p.enrollments), W),
+    c.transactions.insertMany(people.flatMap((p) => p.transactions), TS),
+    c.products.insertMany(products.map(withEmbedding), W),
+    c.offers.insertMany(offers, W),
+    c.priceHistory.insertMany(priceHistory, TS),
+    c.rewardsPrograms.insertMany(rewardsPrograms.map(withEmbedding), W),
+    c.cardOffers.insertMany(cardOffers, W),
+    c.tradeinCurves.insertMany(tradeinCurves, W),
+    c.plans.insertMany(PLANS, W),
   ]);
 
   return {
-    users: 1, merchants: merchants.length, cards: CARDS.length, mandates: mandates.length, transactions: txns.length,
-    products: products.length, offers: offers.length, price_history: priceHistory.length,
+    users: PERSONAS.length, merchants: merchants.length, cards: people.reduce((s, p) => s + p.cards.length, 0),
+    mandates: people.reduce((s, p) => s + p.mandates.length, 0), transactions: people.reduce((s, p) => s + p.transactions.length, 0),
+    products: products.length, offers: offers.length, price_history: priceHistory.length, rewards_programs: rewardsPrograms.length,
+    card_offers: cardOffers.length, devices: people.length, tradein_curves: tradeinCurves.length, plans: PLANS.length,
+    enrollments: people.reduce((s, p) => s + p.enrollments.length, 0), embeddings_kept: keep.size,
   };
 }
