@@ -173,9 +173,7 @@ export default function Home() {
       Bought for {fmtUSD(bought.amountCents)}
       {bought.cardLast4 ? ` on ••${bought.cardLast4}` : ""}
     </StatePill>
-  ) : watching ? (
-    <StatePill tone="accent">Watching — buys at {fmtUSD(watching.targetPriceCents)}</StatePill>
-  ) : (
+  ) : watching ? null : ( // the card shows an eye + target price instead
     <button
       type="button"
       onClick={() => watch(verdict)}
@@ -206,6 +204,7 @@ export default function Home() {
                 verdict={verdict}
                 product={{ title: verdict.product?.title ?? verdictProductTitle(verdict.productId) ?? "", imageUrl: verdict.product?.imageUrl }}
                 actions={verdictCta}
+                watchingCents={watching?.targetPriceCents}
                 details={<VerdictGraphs verdict={verdict} />}
               />
             ) : (
